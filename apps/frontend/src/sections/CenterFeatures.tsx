@@ -32,7 +32,7 @@ export function CenterFeatures() {
         <h2 style={{ fontSize: "clamp(26px,3vw,34px)", margin: "0 0 40px", maxWidth: "26ch" }}>
           Run your institute without the busywork
         </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 22 }}>
+        <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 22 }}>
           {features.map(({ icon: Icon, title, body }) => (
             <div key={title} className="card elev-sm" style={{ padding: 26, gap: 14 }}>
               <div style={{ width: 44, height: 44, borderRadius: 12, display: "grid", placeContent: "center", ...centerIconTileStyle }}>

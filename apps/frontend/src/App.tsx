@@ -1,7 +1,7 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { RequireAuth } from "./auth/RequireAuth";
-import { Home } from "./pages/Home";
+import { RootRoute } from "./pages/RootRoute";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterInstitutePage } from "./pages/auth/RegisterInstitutePage";
 import { StudentSignupPage } from "./pages/auth/StudentSignupPage";
@@ -26,7 +26,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<RootRoute />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterInstitutePage />} />
           <Route path="/student/signup" element={<StudentSignupPage />} />

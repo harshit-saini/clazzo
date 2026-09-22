@@ -258,3 +258,72 @@ textarea.input { min-height: 90px; resize: vertical; }
 /* — page-level link override (from the homepage's own <helmet>) — */
 a { color: var(--color-accent); text-decoration: none; }
 a:hover { color: var(--color-accent-600); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Responsive — mobile layout for the marketing site, staff dashboard and
+   student portal. Section/grid containers set their column count via
+   inline style (they're plain React style objects, not classed), so these
+   overrides use !important — the one legitimate case for it: there's no
+   other way to make an inline style respond to a media query.
+   ══════════════════════════════════════════════════════════════════════ */
+
+html, body { overflow-x: hidden; }
+
+/* Marketing nav: collapse the link row into a toggleable dropdown. */
+.nav-toggle {
+  display: none; background: none; border: none; cursor: pointer;
+  padding: 6px; color: var(--color-text);
+}
+@media (max-width: 860px) {
+  /* .nav-links carries an inline display:flex (set in Nav.tsx) which beats
+     a plain CSS rule — !important is the only way to override it here. */
+  .nav-links { display: none !important; }
+  .nav-links.nav-links-open {
+    display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 14px !important;
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 49;
+    background: var(--color-bg); padding: 20px 24px 24px;
+    border-bottom: 1px solid var(--color-divider);
+  }
+  .nav-links.nav-links-open .nav-spacer { display: none; }
+  .nav-toggle { display: inline-flex; }
+}
+
+/* Marketing section grids: 2/3 columns -> fewer, then 1, on small screens. */
+@media (max-width: 900px) {
+  .grid-3 { grid-template-columns: repeat(2, 1fr) !important; }
+}
+@media (max-width: 640px) {
+  .grid-2, .grid-3, .footer-grid { grid-template-columns: 1fr !important; }
+}
+
+/* App shell (staff dashboard / student portal): sidebar becomes an
+   off-canvas drawer behind a hamburger toggle. */
+.app-shell-toggle { display: none; }
+@media (max-width: 860px) {
+  .app-shell-toggle {
+    display: flex; align-items: center; justify-content: center;
+    position: fixed; top: 14px; left: 14px; z-index: 60;
+    width: 40px; height: 40px; border-radius: 999px; border: none;
+    background: var(--color-surface); box-shadow: var(--shadow-md); cursor: pointer;
+  }
+  .app-shell-sidebar {
+    position: fixed !important; top: 0; left: 0; bottom: 0; z-index: 55;
+    transform: translateX(-100%); transition: transform 0.2s ease;
+    box-shadow: var(--shadow-lg); overflow-y: auto;
+  }
+  .app-shell-sidebar.open { transform: translateX(0); }
+  .app-shell-scrim.show {
+    display: block; position: fixed; inset: 0; z-index: 50;
+    background: color-mix(in srgb, var(--color-neutral-900) 45%, transparent);
+  }
+  .app-shell-main { padding: 76px 20px 32px !important; }
+}
+.app-shell-scrim { display: none; }
+
+/* A table wider than its container scrolls horizontally instead of
+   squeezing columns unreadably narrow. */
+.table-scroll { overflow-x: auto; }
+
+@media (max-width: 480px) {
+  .card.elev-md, .card.elev-lg { padding: 24px !important; }
+}

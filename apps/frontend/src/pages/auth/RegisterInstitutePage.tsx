@@ -26,7 +26,7 @@ export function RegisterInstitutePage() {
 
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
-      <div className="card elev-md" style={{ width: 400, padding: 36, gap: 18 }}>
+      <div className="card elev-md" style={{ width: "min(400px, 100%)", padding: 36, gap: 18 }}>
         <span className="nav-brand">Clazzo</span>
         <h1 style={{ fontSize: 22, margin: 0 }}>Register your institute</h1>
 

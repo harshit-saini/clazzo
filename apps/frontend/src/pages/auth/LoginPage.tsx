@@ -43,7 +43,7 @@ export function LoginPage() {
 
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
-      <div className="card elev-md" style={{ width: 380, padding: 36, gap: 18 }}>
+      <div className="card elev-md" style={{ width: "min(380px, 100%)", padding: 36, gap: 18 }}>
         <span className="nav-brand">Clazzo</span>
         <h1 style={{ fontSize: 22, margin: 0 }}>Log in</h1>
 

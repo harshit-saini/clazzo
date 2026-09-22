@@ -7,6 +7,7 @@ export function Footer() {
   return (
     <footer style={{ padding: "0 0 40px" }}>
       <div
+        className="footer-grid"
         style={{
           maxWidth: 1200,
           margin: "0 auto",

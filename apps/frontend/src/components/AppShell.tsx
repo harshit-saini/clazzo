@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { MenuIcon } from "../icons";
 
 export interface NavItem {
   to: string;
@@ -10,10 +11,21 @@ export interface NavItem {
 
 export function AppShell({ brand, navItems, extra }: { brand: string; navItems: NavItem[]; extra?: ReactNode }) {
   const { identity, logout } = useAuth();
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
+
+  // Close the drawer whenever the route changes, however navigation happened.
+  useEffect(() => setOpen(false), [location.pathname]);
 
   return (
     <div style={{ minHeight: "100vh", display: "flex" }}>
+      <button type="button" className="app-shell-toggle" aria-label="Open menu" onClick={() => setOpen(true)}>
+        <MenuIcon size={20} />
+      </button>
+      <div className={`app-shell-scrim${open ? " show" : ""}`} onClick={() => setOpen(false)} />
+
       <aside
+        className={`app-shell-sidebar${open ? " open" : ""}`}
         style={{
           width: 220,
           flexShrink: 0,
@@ -58,7 +70,7 @@ export function AppShell({ brand, navItems, extra }: { brand: string; navItems: 
           </button>
         </div>
       </aside>
-      <main style={{ flex: 1, padding: "32px 40px", maxWidth: 1100 }}>
+      <main className="app-shell-main" style={{ flex: 1, padding: "32px 40px", maxWidth: 1100 }}>
         <Outlet />
       </main>
     </div>

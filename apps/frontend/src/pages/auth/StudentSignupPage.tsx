@@ -26,7 +26,7 @@ export function StudentSignupPage() {
 
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
-      <div className="card elev-md" style={{ width: 380, padding: 36, gap: 18 }}>
+      <div className="card elev-md" style={{ width: "min(380px, 100%)", padding: 36, gap: 18 }}>
         <span className="nav-brand">Clazzo</span>
         <h1 style={{ fontSize: 22, margin: 0 }}>Student sign up</h1>
         <p style={{ fontSize: 14, margin: 0, color: "color-mix(in srgb, var(--color-text) 72%, transparent)" }}>

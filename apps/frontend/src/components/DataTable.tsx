@@ -17,25 +17,27 @@ export function DataTable<T>({ columns, rows, rowKey, emptyMessage = "Nothing he
   }
 
   return (
-    <table className="table">
-      <thead>
-        <tr>
-          {columns.map((col) => (
-            <th key={col.header} style={{ width: col.width }}>
-              {col.header}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={rowKey(row)}>
+    <div className="table-scroll">
+      <table className="table">
+        <thead>
+          <tr>
             {columns.map((col) => (
-              <td key={col.header}>{col.render(row)}</td>
+              <th key={col.header} style={{ width: col.width }}>
+                {col.header}
+              </th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={rowKey(row)}>
+              {columns.map((col) => (
+                <td key={col.header}>{col.render(row)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
