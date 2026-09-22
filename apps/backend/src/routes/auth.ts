@@ -4,7 +4,7 @@ import { prisma } from "../db.js";
 import { resolveIdentityByEmail } from "../auth/identity.js";
 import { issueOtpForEmail } from "../auth/issueOtp.js";
 import { isOtpRequestAllowed } from "../auth/rateLimit.js";
-import { MAX_OTP_ATTEMPTS, hashOtpCode } from "../auth/otp.js";
+import { verifyOtpCode } from "../auth/verifyOtp.js";
 
 const registerSchema = z.object({
   instituteName: z.string().min(1),
@@ -90,32 +90,14 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.post("/otp/verify", async (request, reply) => {
     const { email, code } = otpVerifySchema.parse(request.body);
 
-    const otp = await prisma.otpCode.findFirst({
-      where: { email, consumedAt: null },
-      orderBy: { createdAt: "desc" },
-    });
-
-    if (!otp || otp.expiresAt < new Date()) {
-      return reply.code(401).send({ error: "Invalid or expired code" });
-    }
-
-    if (otp.attempts >= MAX_OTP_ATTEMPTS) {
-      await prisma.otpCode.update({ where: { id: otp.id }, data: { consumedAt: new Date() } });
-      return reply.code(401).send({ error: "Too many incorrect attempts. Request a new code." });
-    }
-
-    if (otp.codeHash !== hashOtpCode(code)) {
-      await prisma.otpCode.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
-      return reply.code(401).send({ error: "Invalid or expired code" });
-    }
+    const result = await verifyOtpCode(email, code);
+    if (!result.ok) return reply.code(401).send({ error: result.error });
 
     const identity = await resolveIdentityByEmail(email);
     if (!identity) {
       // The account was deleted/deactivated between requesting and verifying the code.
       return reply.code(401).send({ error: "Invalid or expired code" });
     }
-
-    await prisma.otpCode.update({ where: { id: otp.id }, data: { consumedAt: new Date() } });
 
     const token = fastify.jwt.sign(identity);
     return reply.send({ token, identity });

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { asStaff, resolveIdentityByEmail } from "../auth/identity.js";
 import { sendStaffWelcomeEmail } from "../email/resend.js";
+import { logAudit } from "../lib/audit.js";
 
 const createStaffSchema = z.object({
   name: z.string().min(1),
@@ -39,15 +40,28 @@ export default async function staffRoutes(fastify: FastifyInstance) {
 
     await sendStaffWelcomeEmail(staff.email, staff.name, institute.name);
 
+    await logAudit({
+      actor: me,
+      instituteId: me.instituteId,
+      action: "staff.create",
+      entityType: "User",
+      entityId: staff.id,
+      metadata: { email: staff.email, role: staff.role },
+    });
+
     return reply.code(201).send(staff);
   });
 
   fastify.patch("/:id/deactivate", { preHandler: fastify.requireOwner }, async (request, reply) => {
+    const me = asStaff(request.user);
     const { id } = request.params as { id: string };
-    const staff = await prisma.user.findFirst({ where: { id, instituteId: asStaff(request.user).instituteId } });
+    const staff = await prisma.user.findFirst({ where: { id, instituteId: me.instituteId } });
     if (!staff) return reply.code(404).send({ error: "Not found" });
 
     const updated = await prisma.user.update({ where: { id }, data: { isActive: false } });
+
+    await logAudit({ actor: me, instituteId: me.instituteId, action: "staff.deactivate", entityType: "User", entityId: id });
+
     return { id: updated.id, isActive: updated.isActive };
   });
 }

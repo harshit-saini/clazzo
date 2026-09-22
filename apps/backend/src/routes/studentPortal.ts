@@ -24,6 +24,7 @@ export default async function studentPortalRoutes(fastify: FastifyInstance) {
       institute: m.institute,
       grade: m.grade,
       activeCourseCount: m._count.enrollments,
+      consentStatus: m.consentStatus,
     }));
   });
 
@@ -54,6 +55,16 @@ export default async function studentPortalRoutes(fastify: FastifyInstance) {
     });
     if (!membership) return reply.code(404).send({ error: "Not found" });
 
+    if (membership.consentStatus === "PENDING") {
+      return reply.send({
+        institute: membership.institute,
+        grade: membership.grade,
+        consentStatus: "PENDING",
+        courses: [],
+        invoices: [],
+      });
+    }
+
     const batchIds = membership.enrollments.map((e) => e.batchId);
     const attendanceRows = await prisma.attendance.findMany({
       where: { studentId: membership.id, classSession: { batchId: { in: batchIds } } },
@@ -72,6 +83,7 @@ export default async function studentPortalRoutes(fastify: FastifyInstance) {
     return {
       institute: membership.institute,
       grade: membership.grade,
+      consentStatus: membership.consentStatus,
       courses: membership.enrollments.map((e) => ({
         batchId: e.batch.id,
         name: e.batch.name,
@@ -91,6 +103,9 @@ export default async function studentPortalRoutes(fastify: FastifyInstance) {
 
     const membership = await prisma.student.findFirst({ where: { studentAccountId, instituteId, isActive: true } });
     if (!membership) return reply.code(404).send({ error: "Not found" });
+    if (membership.consentStatus === "PENDING") {
+      return reply.code(403).send({ error: "Access pending guardian confirmation" });
+    }
 
     return prisma.attendance.findMany({
       where: { studentId: membership.id },

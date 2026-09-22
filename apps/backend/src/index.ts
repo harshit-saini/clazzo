@@ -13,6 +13,8 @@ import attendanceRoutes from "./routes/attendance.js";
 import feeRoutes from "./routes/fees.js";
 import gradeRoutes from "./routes/grades.js";
 import studentPortalRoutes from "./routes/studentPortal.js";
+import consentRoutes from "./routes/consent.js";
+import dashboardRoutes from "./routes/dashboard.js";
 
 const app = Fastify({ logger: true });
 
@@ -39,6 +41,8 @@ await app.register(attendanceRoutes, { prefix: "/api" });
 await app.register(feeRoutes, { prefix: "/api" });
 await app.register(gradeRoutes, { prefix: "/api/grades" });
 await app.register(studentPortalRoutes, { prefix: "/api/student" });
+await app.register(consentRoutes, { prefix: "/api/consent" });
+await app.register(dashboardRoutes, { prefix: "/api/dashboard" });
 
 const port = Number(process.env.PORT ?? 3001);
 

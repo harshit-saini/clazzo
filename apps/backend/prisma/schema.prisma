@@ -63,6 +63,29 @@ model OtpCode {
   @@index([email])
 }
 
+// ─── Audit ──────────────────────────────────────────────────────────────
+
+/// Append-only record of sensitive actions (student PII edits, invites,
+/// attendance/payment changes, role changes, logins). Deliberately generic
+/// — replaces one-off "who did X" columns (invitedById, markedById, ...)
+/// as the actual answer to "who touched this record and when." Starting
+/// scaffolding: wired into the highest-value mutations first, not
+/// literally everything yet.
+model AuditLog {
+  id          String   @id @default(cuid())
+  instituteId String?
+  actorType   String   // "STAFF" | "STUDENT" | "SYSTEM"
+  actorId     String?
+  action      String   // e.g. "student.invite", "attendance.mark", "payment.record"
+  entityType  String
+  entityId    String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([instituteId, createdAt])
+  @@index([entityType, entityId])
+}
+
 // ─── Students & enrollment ──────────────────────────────────────────────
 
 /// A student's global login identity — passwordless (OTP-only), and
@@ -78,6 +101,12 @@ model StudentAccount {
   memberships Student[]
 }
 
+enum ConsentStatus {
+  NOT_REQUIRED
+  PENDING
+  CONFIRMED
+}
+
 /// A student's membership at one institute — their roster entry there:
 /// grade, enrollments, attendance, fees. Platform access is optional:
 /// studentAccountId is null until a teacher invites them (by email, which
@@ -91,6 +120,7 @@ model Student {
   phone         String?
   guardianName  String?
   guardianPhone String?
+  guardianEmail String?
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
 
@@ -102,6 +132,17 @@ model Student {
   invitedAt        DateTime?
   invitedById      String?
   invitedBy        User?           @relation("StudentInvitedBy", fields: [invitedById], references: [id])
+
+  // Guardian consent for portal access. When guardianEmail is set at invite
+  // time, the studentAccountId link above is created immediately but the
+  // portal treats this membership as gated (PENDING) until the guardian
+  // confirms via an emailed code (POST /api/consent/confirm). No guardian
+  // email on file -> NOT_REQUIRED, matching pre-consent-feature behavior.
+  // NOTE: this is technical scaffolding with sensible defaults, not legal
+  // advice — review against applicable minors'-data-protection law before
+  // relying on it.
+  consentStatus      ConsentStatus @default(NOT_REQUIRED)
+  consentConfirmedAt DateTime?
 
   enrollments Enrollment[]
   attendance  Attendance[]

@@ -3,7 +3,9 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { asStaff, resolveIdentityByEmail } from "../auth/identity.js";
 import { sendInviteEmail } from "../email/resend.js";
+import { issueConsentOtpForEmail } from "../auth/issueOtp.js";
 import { assertGradeInInstitute } from "../lib/grades.js";
+import { logAudit } from "../lib/audit.js";
 
 const createStudentSchema = z.object({
   name: z.string().min(1),
@@ -17,6 +19,7 @@ const updateStudentSchema = createStudentSchema.partial();
 
 const inviteSchema = z.object({
   email: z.string().email().transform((e) => e.toLowerCase()),
+  guardianEmail: z.string().email().transform((e) => e.toLowerCase()).optional(),
 });
 
 export default async function studentRoutes(fastify: FastifyInstance) {
@@ -39,8 +42,10 @@ export default async function studentRoutes(fastify: FastifyInstance) {
         phone: true,
         guardianName: true,
         guardianPhone: true,
+        guardianEmail: true,
         grade: { select: { id: true, name: true } },
         studentAccountId: true,
+        consentStatus: true,
         invitedAt: true,
         createdAt: true,
         enrollments: {
@@ -67,33 +72,65 @@ export default async function studentRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post("/", async (request, reply) => {
+    const staff = asStaff(request.user);
     const body = createStudentSchema.parse(request.body);
-    await assertGradeInInstitute(body.gradeId, asStaff(request.user).instituteId);
+    await assertGradeInInstitute(body.gradeId, staff.instituteId);
 
     const student = await prisma.student.create({
-      data: { instituteId: asStaff(request.user).instituteId, ...body },
+      data: { instituteId: staff.instituteId, ...body },
+    });
+
+    await logAudit({
+      actor: staff,
+      instituteId: staff.instituteId,
+      action: "student.create",
+      entityType: "Student",
+      entityId: student.id,
+      metadata: { name: student.name },
     });
 
     return reply.code(201).send(student);
   });
 
   fastify.patch("/:id", async (request, reply) => {
+    const staff = asStaff(request.user);
     const { id } = request.params as { id: string };
     const body = updateStudentSchema.parse(request.body);
-    await assertGradeInInstitute(body.gradeId, asStaff(request.user).instituteId);
+    await assertGradeInInstitute(body.gradeId, staff.instituteId);
 
-    const existing = await prisma.student.findFirst({ where: { id, instituteId: asStaff(request.user).instituteId } });
+    const existing = await prisma.student.findFirst({ where: { id, instituteId: staff.instituteId } });
     if (!existing) return reply.code(404).send({ error: "Not found" });
 
-    return prisma.student.update({ where: { id }, data: body });
+    const updated = await prisma.student.update({ where: { id }, data: body });
+
+    await logAudit({
+      actor: staff,
+      instituteId: staff.instituteId,
+      action: "student.update",
+      entityType: "Student",
+      entityId: id,
+      metadata: { fields: Object.keys(body) },
+    });
+
+    return updated;
   });
 
   fastify.delete("/:id", async (request, reply) => {
+    const staff = asStaff(request.user);
     const { id } = request.params as { id: string };
-    const existing = await prisma.student.findFirst({ where: { id, instituteId: asStaff(request.user).instituteId } });
+    const existing = await prisma.student.findFirst({ where: { id, instituteId: staff.instituteId } });
     if (!existing) return reply.code(404).send({ error: "Not found" });
 
     await prisma.student.update({ where: { id }, data: { isActive: false } });
+
+    await logAudit({
+      actor: staff,
+      instituteId: staff.instituteId,
+      action: "student.deactivate",
+      entityType: "Student",
+      entityId: id,
+    });
+
     return reply.code(204).send();
   });
 
@@ -102,10 +139,16 @@ export default async function studentRoutes(fastify: FastifyInstance) {
   // The email resolves-or-creates a global StudentAccount, so a student who
   // already has an account elsewhere (or signed up themselves) just gets
   // this institute linked onto it, rather than a duplicate identity.
+  //
+  // If a guardianEmail is on file (passed here, or previously saved), this
+  // membership is gated PENDING until the guardian confirms via an emailed
+  // code (POST /api/consent/confirm) — the roster row and staff-side
+  // management are unaffected either way; only this student's own portal
+  // visibility into this institute is gated.
   fastify.post("/:id/invite", async (request, reply) => {
     const staff = asStaff(request.user);
     const { id } = request.params as { id: string };
-    const { email } = inviteSchema.parse(request.body);
+    const { email, guardianEmail } = inviteSchema.parse(request.body);
 
     const student = await prisma.student.findFirst({
       where: { id, instituteId: staff.instituteId },
@@ -131,15 +174,41 @@ export default async function studentRoutes(fastify: FastifyInstance) {
       accountId = account.id;
     }
 
+    const effectiveGuardianEmail = guardianEmail ?? student.guardianEmail ?? undefined;
+    const needsConsent = Boolean(effectiveGuardianEmail) && student.consentStatus !== "CONFIRMED";
+
     const institute = await prisma.institute.findUniqueOrThrow({ where: { id: staff.instituteId } });
 
     const updated = await prisma.student.update({
       where: { id },
-      data: { studentAccountId: accountId, invitedAt: new Date(), invitedById: staff.userId },
+      data: {
+        studentAccountId: accountId,
+        invitedAt: new Date(),
+        invitedById: staff.userId,
+        guardianEmail: effectiveGuardianEmail,
+        consentStatus: effectiveGuardianEmail ? (needsConsent ? "PENDING" : "CONFIRMED") : "NOT_REQUIRED",
+      },
     });
 
     await sendInviteEmail(email, student.name, institute.name);
+    if (needsConsent && effectiveGuardianEmail) {
+      await issueConsentOtpForEmail(effectiveGuardianEmail, student.name, institute.name);
+    }
 
-    return reply.send({ id: updated.id, studentAccountId: updated.studentAccountId, invitedAt: updated.invitedAt });
+    await logAudit({
+      actor: staff,
+      instituteId: staff.instituteId,
+      action: "student.invite",
+      entityType: "Student",
+      entityId: id,
+      metadata: { email, guardianEmail: effectiveGuardianEmail ?? null, consentStatus: updated.consentStatus },
+    });
+
+    return reply.send({
+      id: updated.id,
+      studentAccountId: updated.studentAccountId,
+      invitedAt: updated.invitedAt,
+      consentStatus: updated.consentStatus,
+    });
   });
 }

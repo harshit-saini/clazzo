@@ -46,6 +46,19 @@ grants a session.
 Without `RESEND_API_KEY` set, emails are logged to the console instead of
 sent — useful for local dev.
 
+### Guardian consent
+
+If a `guardianEmail` is given (or already on file) when inviting a student
+(`POST /api/students/:id/invite`), that membership's `consentStatus` is set
+to `PENDING` instead of activating immediately, and a code is emailed to
+the guardian. `POST /api/consent/confirm { email, code }` (no auth — the
+guardian has no account) confirms every pending membership under that
+email at once. Until confirmed, the student portal shows that institute
+with `consentStatus: "PENDING"` and no course/attendance/fee detail.
+
+This is technical scaffolding with sensible defaults, not legal sign-off —
+review against applicable minors'-data-protection law before relying on it.
+
 ## Data model
 
 - **Institute** — the tenant. Most models are scoped to one.
@@ -70,6 +83,10 @@ sent — useful for local dev.
 - **FeeStructure** — a batch's default price/billing cycle.
 - **FeeInvoice** / **FeePayment** — what a specific student owes, and the
   (possibly partial) payments recorded against it, each with a payment method.
+- **AuditLog** — append-only record of sensitive actions (student PII
+  edits, invites, attendance/payment changes, staff changes, consent).
+  Starting scaffolding: wired into the highest-value mutations so far, not
+  literally every write yet.
 
 ## API
 
@@ -94,6 +111,8 @@ Every route except `/health` and `/api/auth/*` requires
 | Attendance | `GET/POST /api/sessions/:sessionId/attendance`, `GET /api/students/:studentId/attendance` |
 | Fees | `PUT/GET /api/batches/:batchId/fee-structure`, `GET /api/invoices`, `GET/POST /api/students/:studentId/invoices`, `POST /api/invoices/:invoiceId/payments` |
 | Student portal | `GET /api/student/institutes` (every institute this student belongs to), `GET /api/student/institutes/:instituteId` (grade, courses, teachers, schedule, attendance summary, invoices), `GET /api/student/institutes/:instituteId/attendance` (full history) |
+| Consent | `POST /api/consent/confirm` (no auth) — a guardian confirms pending portal access by email + emailed code |
+| Dashboard | `GET /api/dashboard/today` (today's sessions with marked/enrolled counts), `GET /api/dashboard/summary` (active students/batches, today's unmarked sessions, outstanding dues, this month's collections) |
 
 ## Notes
 

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { recalculateInvoiceStatus } from "../lib/invoices.js";
 import { asStaff } from "../auth/identity.js";
+import { logAudit } from "../lib/audit.js";
 
 const feeStructureSchema = z.object({
   amount: z.coerce.number().positive(),
@@ -120,6 +121,15 @@ export default async function feeRoutes(fastify: FastifyInstance) {
     });
 
     const status = await recalculateInvoiceStatus(invoiceId);
+
+    await logAudit({
+      actor: staff,
+      instituteId: staff.instituteId,
+      action: "payment.record",
+      entityType: "FeeInvoice",
+      entityId: invoiceId,
+      metadata: { amount: body.amount, method: body.method, resultingStatus: status },
+    });
 
     return reply.code(201).send({ payment, invoiceStatus: status });
   });

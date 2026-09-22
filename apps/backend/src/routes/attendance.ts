@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { asStaff } from "../auth/identity.js";
+import { logAudit } from "../lib/audit.js";
 
 const markAttendanceSchema = z.object({
   records: z
@@ -81,6 +82,15 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
         })
       )
     );
+
+    await logAudit({
+      actor: staff,
+      instituteId: staff.instituteId,
+      action: "attendance.mark",
+      entityType: "ClassSession",
+      entityId: sessionId,
+      metadata: { count: records.length, statuses: records.map((r) => r.status) },
+    });
 
     return reply.send({ marked: records.length });
   });

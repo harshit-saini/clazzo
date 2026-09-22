@@ -48,6 +48,19 @@ export async function sendStaffWelcomeEmail(to: string, name: string, instituteN
   });
 }
 
+export async function sendConsentEmail(to: string, code: string, studentName: string, instituteName: string) {
+  await sendEmail({
+    to,
+    subject: `Confirm ${studentName}'s Clazzo access at ${instituteName}`,
+    html: `
+      <p>${instituteName} has invited ${studentName} to Clazzo, where they can check attendance, class schedule and fee status.</p>
+      <p>Because you're listed as their guardian, we need your confirmation before this access goes live. Enter this code where prompted:</p>
+      <p style="font-size:28px;font-weight:bold;letter-spacing:4px">${code}</p>
+      <p>This code expires in 10 minutes. If you weren't expecting this, you can ignore this email and the access will stay inactive.</p>
+    `,
+  });
+}
+
 export async function sendInviteEmail(to: string, studentName: string, instituteName: string) {
   await sendEmail({
     to,
