@@ -54,7 +54,7 @@ export function Hero() {
           </p>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28 }}>
+        <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28 }}>
           <div style={{ background: "var(--color-accent-100)", borderRadius: 32, padding: 40, display: "flex", flexDirection: "column", gap: 18 }}>
             <div style={{ width: 56, height: 56, borderRadius: "50%", display: "grid", placeContent: "center", ...centerIconTileStyle }}>
               <SchoolIcon size={26} strokeWidth={2.75} />

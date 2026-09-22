@@ -63,7 +63,7 @@ export function HowItWorks() {
         <h2 style={{ fontSize: "clamp(28px,3vw,36px)", margin: "0 0 48px", maxWidth: "22ch" }}>
           Built for both sides of the classroom
         </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 56 }}>
+        <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 56 }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28 }}>
               <SchoolIcon size={22} color="var(--color-accent-700)" />

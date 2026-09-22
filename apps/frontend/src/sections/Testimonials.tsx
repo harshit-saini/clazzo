@@ -44,7 +44,7 @@ export function Testimonials() {
             </div>
           ))}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22 }}>
+        <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22 }}>
           {testimonials.map((t) => {
             const c = accentColors[t.accent];
             return (

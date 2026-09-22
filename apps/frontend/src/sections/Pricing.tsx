@@ -24,7 +24,7 @@ export function Pricing() {
             Students always join for free. Coaching centers pick a plan that fits their size.
           </p>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 22, alignItems: "start" }}>
+        <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 22, alignItems: "start" }}>
           {pricingPlans.map((plan) => (
             <div
               key={plan.id}

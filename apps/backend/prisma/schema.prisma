@@ -1,0 +1,349 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Tenancy & staff ────────────────────────────────────────────────────
+
+/// A coaching institute or an individual teacher's account. The tenant
+/// boundary — every other model hangs off one institute.
+model Institute {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  users     User[]
+  students  Student[]
+  batches   Batch[]
+  grades    Grade[]
+}
+
+enum StaffRole {
+  OWNER
+  TEACHER
+}
+
+/// A teacher or institute owner. Always has platform access (unlike Student).
+/// Passwordless — logs in via emailed OTP (see OtpCode).
+model User {
+  id          String    @id @default(cuid())
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  name        String
+  email       String    @unique
+  role        StaffRole @default(TEACHER)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  taughtBatches    Batch[]      @relation("BatchPrimaryTeacher")
+  markedAttendance Attendance[] @relation("AttendanceMarkedBy")
+  recordedPayments FeePayment[] @relation("PaymentRecordedBy")
+  invitedStudents  Student[]    @relation("StudentInvitedBy")
+
+  @@index([instituteId])
+}
+
+// ─── Auth (passwordless OTP) ────────────────────────────────────────────
+
+/// A one-time login code emailed to a User or Student. Identity isn't
+/// stored here — verification re-resolves the email to whichever account
+/// owns it — so this table only ever needs to know the email and the code.
+model OtpCode {
+  id         String    @id @default(cuid())
+  email      String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([email])
+}
+
+// ─── Audit ──────────────────────────────────────────────────────────────
+
+/// Append-only record of sensitive actions (student PII edits, invites,
+/// attendance/payment changes, role changes, logins). Deliberately generic
+/// — replaces one-off "who did X" columns (invitedById, markedById, ...)
+/// as the actual answer to "who touched this record and when." Starting
+/// scaffolding: wired into the highest-value mutations first, not
+/// literally everything yet.
+model AuditLog {
+  id          String   @id @default(cuid())
+  instituteId String?
+  actorType   String   // "STAFF" | "STUDENT" | "SYSTEM"
+  actorId     String?
+  action      String   // e.g. "student.invite", "attendance.mark", "payment.record"
+  entityType  String
+  entityId    String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([instituteId, createdAt])
+  @@index([entityType, entityId])
+}
+
+// ─── Students & enrollment ──────────────────────────────────────────────
+
+/// A student's global login identity — passwordless (OTP-only), and
+/// independent of any institute. A person creates exactly one of these
+/// (self-signup or their first invite), then links to a Student row (a
+/// per-institute membership) at every school/coaching-center they join.
+model StudentAccount {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  memberships Student[]
+}
+
+enum ConsentStatus {
+  NOT_REQUIRED
+  PENDING
+  CONFIRMED
+}
+
+/// A student's membership at one institute — their roster entry there:
+/// grade, enrollments, attendance, fees. Platform access is optional:
+/// studentAccountId is null until a teacher invites them (by email, which
+/// resolves-or-creates the StudentAccount) or the student signs up
+/// themselves and a teacher later invites the same email.
+model Student {
+  id            String   @id @default(cuid())
+  instituteId   String
+  institute     Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  name          String
+  phone         String?
+  guardianName  String?
+  guardianPhone String?
+  guardianEmail String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  gradeId String?
+  grade   Grade?  @relation(fields: [gradeId], references: [id])
+
+  studentAccountId String?
+  studentAccount   StudentAccount? @relation(fields: [studentAccountId], references: [id])
+  invitedAt        DateTime?
+  invitedById      String?
+  invitedBy        User?           @relation("StudentInvitedBy", fields: [invitedById], references: [id])
+
+  // Guardian consent for portal access. When guardianEmail is set at invite
+  // time, the studentAccountId link above is created immediately but the
+  // portal treats this membership as gated (PENDING) until the guardian
+  // confirms via an emailed code (POST /api/consent/confirm). No guardian
+  // email on file -> NOT_REQUIRED, matching pre-consent-feature behavior.
+  // NOTE: this is technical scaffolding with sensible defaults, not legal
+  // advice — review against applicable minors'-data-protection law before
+  // relying on it.
+  consentStatus      ConsentStatus @default(NOT_REQUIRED)
+  consentConfirmedAt DateTime?
+
+  enrollments Enrollment[]
+  attendance  Attendance[]
+  invoices    FeeInvoice[]
+
+  @@index([instituteId])
+  @@index([studentAccountId])
+}
+
+/// A structured grade/section within one institute (e.g. "Class 7"), so
+/// batches and student memberships can be organized and browsed by it.
+model Grade {
+  id          String    @id @default(cuid())
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  name        String
+  createdAt   DateTime  @default(now())
+
+  batches  Batch[]
+  students Student[]
+
+  @@unique([instituteId, name])
+  @@index([instituteId])
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  DROPPED
+}
+
+/// Join table: which batches a student is enrolled in.
+model Enrollment {
+  id         String           @id @default(cuid())
+  batchId    String
+  batch      Batch            @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status     EnrollmentStatus @default(ACTIVE)
+  enrolledAt DateTime         @default(now())
+
+  @@unique([batchId, studentId])
+  @@index([studentId])
+}
+
+// ─── Batches & schedule ─────────────────────────────────────────────────
+
+/// A course/batch — the unit students enroll into and get scheduled,
+/// billed and marked present against.
+model Batch {
+  id                String    @id @default(cuid())
+  instituteId       String
+  institute         Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  name              String
+  subject           String?
+  description       String?
+  primaryTeacherId  String?
+  primaryTeacher    User?     @relation("BatchPrimaryTeacher", fields: [primaryTeacherId], references: [id])
+  gradeId           String?
+  grade             Grade?    @relation(fields: [gradeId], references: [id])
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+
+  enrollments   Enrollment[]
+  scheduleSlots ScheduleSlot[]
+  sessions      ClassSession[]
+  feeStructure  FeeStructure?
+
+  @@index([instituteId])
+}
+
+/// A recurring weekly time slot (e.g. "Mon/Wed/Fri 5–6pm") used to
+/// generate concrete ClassSession rows.
+model ScheduleSlot {
+  id        String   @id @default(cuid())
+  batchId   String
+  batch     Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  dayOfWeek Int      // 0 = Sunday .. 6 = Saturday
+  startTime String   // "HH:mm", 24-hour
+  endTime   String   // "HH:mm", 24-hour
+  createdAt DateTime @default(now())
+
+  @@index([batchId])
+}
+
+enum SessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+/// A concrete, dated occurrence of a class — what attendance is taken
+/// against. Generated from ScheduleSlots (or created ad hoc).
+model ClassSession {
+  id        String        @id @default(cuid())
+  batchId   String
+  batch     Batch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  date      DateTime      // calendar date of the session (time-of-day zeroed)
+  startTime String        // "HH:mm"
+  endTime   String        // "HH:mm"
+  status    SessionStatus @default(SCHEDULED)
+  createdAt DateTime      @default(now())
+
+  attendance Attendance[]
+
+  @@unique([batchId, date, startTime])
+  @@index([batchId, date])
+}
+
+// ─── Attendance ─────────────────────────────────────────────────────────
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+/// One row per student per session.
+model Attendance {
+  id             String           @id @default(cuid())
+  classSessionId String
+  classSession   ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status         AttendanceStatus
+  markedById     String?
+  markedBy       User?            @relation("AttendanceMarkedBy", fields: [markedById], references: [id])
+  markedAt       DateTime         @default(now())
+
+  @@unique([classSessionId, studentId])
+  @@index([studentId])
+}
+
+// ─── Fees ───────────────────────────────────────────────────────────────
+
+enum BillingCycle {
+  ONE_TIME
+  MONTHLY
+  QUARTERLY
+}
+
+/// What a batch costs, by default — used as a template when creating
+/// invoices; invoices themselves can still be amount-overridden per student.
+model FeeStructure {
+  id            String       @id @default(cuid())
+  batchId       String       @unique
+  batch         Batch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  amount        Decimal      @db.Decimal(10, 2)
+  billingCycle  BillingCycle @default(MONTHLY)
+  dueDayOfMonth Int?         // e.g. 5 -> due the 5th of each cycle
+  createdAt     DateTime     @default(now())
+}
+
+enum InvoiceStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+}
+
+/// A specific amount owed by a specific student, independent of the fee
+/// structure template so one-off charges/discounts are representable.
+model FeeInvoice {
+  id        String        @id @default(cuid())
+  studentId String
+  student   Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  batchId   String?
+  amount    Decimal       @db.Decimal(10, 2)
+  dueDate   DateTime
+  status    InvoiceStatus @default(PENDING)
+  notes     String?
+  createdAt DateTime      @default(now())
+
+  payments FeePayment[]
+
+  @@index([studentId])
+  @@index([status])
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  BANK_TRANSFER
+  CHEQUE
+  OTHER
+}
+
+/// A payment recorded against an invoice. An invoice can have several
+/// (partial payments); status on the invoice is derived from the sum.
+model FeePayment {
+  id             String        @id @default(cuid())
+  invoiceId      String
+  invoice        FeeInvoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount         Decimal       @db.Decimal(10, 2)
+  method         PaymentMethod
+  paidAt         DateTime      @default(now())
+  notes          String?
+  recordedById   String?
+  recordedBy     User?         @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+
+  @@index([invoiceId])
+}
