@@ -1,12 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { asStaff } from "../auth/identity.js";
+import { assertGradeInInstitute } from "../lib/grades.js";
 
 const createBatchSchema = z.object({
   name: z.string().min(1),
   subject: z.string().optional(),
   description: z.string().optional(),
   primaryTeacherId: z.string().optional(),
+  gradeId: z.string().optional(),
 });
 
 const updateBatchSchema = createBatchSchema.partial();
@@ -19,7 +22,7 @@ export default async function batchRoutes(fastify: FastifyInstance) {
 
   fastify.get("/", async (request) => {
     return prisma.batch.findMany({
-      where: { instituteId: request.user.instituteId, isActive: true },
+      where: { instituteId: asStaff(request.user).instituteId, isActive: true },
       include: {
         primaryTeacher: { select: { id: true, name: true } },
         _count: { select: { enrollments: { where: { status: "ACTIVE" } } } },
@@ -31,7 +34,7 @@ export default async function batchRoutes(fastify: FastifyInstance) {
   fastify.get("/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     const batch = await prisma.batch.findFirst({
-      where: { id, instituteId: request.user.instituteId },
+      where: { id, instituteId: asStaff(request.user).instituteId },
       include: {
         primaryTeacher: { select: { id: true, name: true } },
         scheduleSlots: true,
@@ -48,8 +51,9 @@ export default async function batchRoutes(fastify: FastifyInstance) {
 
   fastify.post("/", async (request, reply) => {
     const body = createBatchSchema.parse(request.body);
+    await assertGradeInInstitute(body.gradeId, asStaff(request.user).instituteId);
     const batch = await prisma.batch.create({
-      data: { instituteId: request.user.instituteId, ...body },
+      data: { instituteId: asStaff(request.user).instituteId, ...body },
     });
     return reply.code(201).send(batch);
   });
@@ -57,8 +61,9 @@ export default async function batchRoutes(fastify: FastifyInstance) {
   fastify.patch("/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = updateBatchSchema.parse(request.body);
+    await assertGradeInInstitute(body.gradeId, asStaff(request.user).instituteId);
 
-    const existing = await prisma.batch.findFirst({ where: { id, instituteId: request.user.instituteId } });
+    const existing = await prisma.batch.findFirst({ where: { id, instituteId: asStaff(request.user).instituteId } });
     if (!existing) return reply.code(404).send({ error: "Not found" });
 
     return prisma.batch.update({ where: { id }, data: body });
@@ -66,7 +71,7 @@ export default async function batchRoutes(fastify: FastifyInstance) {
 
   fastify.delete("/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const existing = await prisma.batch.findFirst({ where: { id, instituteId: request.user.instituteId } });
+    const existing = await prisma.batch.findFirst({ where: { id, instituteId: asStaff(request.user).instituteId } });
     if (!existing) return reply.code(404).send({ error: "Not found" });
 
     await prisma.batch.update({ where: { id }, data: { isActive: false } });
@@ -78,8 +83,8 @@ export default async function batchRoutes(fastify: FastifyInstance) {
     const { studentId } = enrollSchema.parse(request.body);
 
     const [batch, student] = await Promise.all([
-      prisma.batch.findFirst({ where: { id: batchId, instituteId: request.user.instituteId } }),
-      prisma.student.findFirst({ where: { id: studentId, instituteId: request.user.instituteId } }),
+      prisma.batch.findFirst({ where: { id: batchId, instituteId: asStaff(request.user).instituteId } }),
+      prisma.student.findFirst({ where: { id: studentId, instituteId: asStaff(request.user).instituteId } }),
     ]);
     if (!batch || !student) return reply.code(404).send({ error: "Batch or student not found" });
 
@@ -95,7 +100,7 @@ export default async function batchRoutes(fastify: FastifyInstance) {
   fastify.delete("/:id/enroll/:studentId", async (request, reply) => {
     const { id: batchId, studentId } = request.params as { id: string; studentId: string };
 
-    const batch = await prisma.batch.findFirst({ where: { id: batchId, instituteId: request.user.instituteId } });
+    const batch = await prisma.batch.findFirst({ where: { id: batchId, instituteId: asStaff(request.user).instituteId } });
     if (!batch) return reply.code(404).send({ error: "Not found" });
 
     await prisma.enrollment.updateMany({

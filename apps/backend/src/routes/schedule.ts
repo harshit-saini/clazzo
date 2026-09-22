@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { asStaff } from "../auth/identity.js";
 import { eachDateInRange } from "../lib/dates.js";
 
 const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -26,7 +27,7 @@ export default async function scheduleRoutes(fastify: FastifyInstance) {
 
   fastify.get("/batches/:batchId/schedule", async (request, reply) => {
     const { batchId } = request.params as { batchId: string };
-    const batch = await assertBatchInInstitute(batchId, request.user.instituteId);
+    const batch = await assertBatchInInstitute(batchId, asStaff(request.user).instituteId);
     if (!batch) return reply.code(404).send({ error: "Not found" });
 
     return prisma.scheduleSlot.findMany({ where: { batchId }, orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }] });
@@ -36,7 +37,7 @@ export default async function scheduleRoutes(fastify: FastifyInstance) {
     const { batchId } = request.params as { batchId: string };
     const body = slotSchema.parse(request.body);
 
-    const batch = await assertBatchInInstitute(batchId, request.user.instituteId);
+    const batch = await assertBatchInInstitute(batchId, asStaff(request.user).instituteId);
     if (!batch) return reply.code(404).send({ error: "Not found" });
 
     if (body.endTime <= body.startTime) {
@@ -50,7 +51,7 @@ export default async function scheduleRoutes(fastify: FastifyInstance) {
   fastify.delete("/schedule/:slotId", async (request, reply) => {
     const { slotId } = request.params as { slotId: string };
     const slot = await prisma.scheduleSlot.findUnique({ where: { id: slotId }, include: { batch: true } });
-    if (!slot || slot.batch.instituteId !== request.user.instituteId) {
+    if (!slot || slot.batch.instituteId !== asStaff(request.user).instituteId) {
       return reply.code(404).send({ error: "Not found" });
     }
 
@@ -64,7 +65,7 @@ export default async function scheduleRoutes(fastify: FastifyInstance) {
     const { batchId } = request.params as { batchId: string };
     const { fromDate, toDate } = generateSchema.parse(request.body);
 
-    const batch = await assertBatchInInstitute(batchId, request.user.instituteId);
+    const batch = await assertBatchInInstitute(batchId, asStaff(request.user).instituteId);
     if (!batch) return reply.code(404).send({ error: "Not found" });
 
     if (toDate < fromDate) {
@@ -106,7 +107,7 @@ export default async function scheduleRoutes(fastify: FastifyInstance) {
     const { batchId } = request.params as { batchId: string };
     const { from, to } = request.query as { from?: string; to?: string };
 
-    const batch = await assertBatchInInstitute(batchId, request.user.instituteId);
+    const batch = await assertBatchInInstitute(batchId, asStaff(request.user).instituteId);
     if (!batch) return reply.code(404).send({ error: "Not found" });
 
     return prisma.classSession.findMany({
@@ -130,7 +131,7 @@ export default async function scheduleRoutes(fastify: FastifyInstance) {
     const body = z.object({ status: z.enum(["SCHEDULED", "COMPLETED", "CANCELLED"]) }).parse(request.body);
 
     const session = await prisma.classSession.findUnique({ where: { id }, include: { batch: true } });
-    if (!session || session.batch.instituteId !== request.user.instituteId) {
+    if (!session || session.batch.instituteId !== asStaff(request.user).instituteId) {
       return reply.code(404).send({ error: "Not found" });
     }
 

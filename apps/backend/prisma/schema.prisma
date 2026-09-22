@@ -18,6 +18,7 @@ model Institute {
   users     User[]
   students  Student[]
   batches   Batch[]
+  grades    Grade[]
 }
 
 enum StaffRole {
@@ -64,10 +65,24 @@ model OtpCode {
 
 // ─── Students & enrollment ──────────────────────────────────────────────
 
-/// A student the institute manages. Platform access is optional — most
-/// fields describe the student's real-world identity. portalEmail is only
-/// set for the subset who've been invited to self-service (passwordless,
-/// OTP-only login — see OtpCode); its presence alone means "has access".
+/// A student's global login identity — passwordless (OTP-only), and
+/// independent of any institute. A person creates exactly one of these
+/// (self-signup or their first invite), then links to a Student row (a
+/// per-institute membership) at every school/coaching-center they join.
+model StudentAccount {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  memberships Student[]
+}
+
+/// A student's membership at one institute — their roster entry there:
+/// grade, enrollments, attendance, fees. Platform access is optional:
+/// studentAccountId is null until a teacher invites them (by email, which
+/// resolves-or-creates the StudentAccount) or the student signs up
+/// themselves and a teacher later invites the same email.
 model Student {
   id            String   @id @default(cuid())
   instituteId   String
@@ -79,16 +94,36 @@ model Student {
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
 
-  // Optional self-service portal access — null until a teacher invites them.
-  portalEmail String?   @unique
-  invitedAt   DateTime?
-  invitedById String?
-  invitedBy   User?     @relation("StudentInvitedBy", fields: [invitedById], references: [id])
+  gradeId String?
+  grade   Grade?  @relation(fields: [gradeId], references: [id])
+
+  studentAccountId String?
+  studentAccount   StudentAccount? @relation(fields: [studentAccountId], references: [id])
+  invitedAt        DateTime?
+  invitedById      String?
+  invitedBy        User?           @relation("StudentInvitedBy", fields: [invitedById], references: [id])
 
   enrollments Enrollment[]
   attendance  Attendance[]
   invoices    FeeInvoice[]
 
+  @@index([instituteId])
+  @@index([studentAccountId])
+}
+
+/// A structured grade/section within one institute (e.g. "Class 7"), so
+/// batches and student memberships can be organized and browsed by it.
+model Grade {
+  id          String    @id @default(cuid())
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  name        String
+  createdAt   DateTime  @default(now())
+
+  batches  Batch[]
+  students Student[]
+
+  @@unique([instituteId, name])
   @@index([instituteId])
 }
 
@@ -125,6 +160,8 @@ model Batch {
   description       String?
   primaryTeacherId  String?
   primaryTeacher    User?     @relation("BatchPrimaryTeacher", fields: [primaryTeacherId], references: [id])
+  gradeId           String?
+  grade             Grade?    @relation(fields: [gradeId], references: [id])
   isActive          Boolean   @default(true)
   createdAt         DateTime  @default(now())
 

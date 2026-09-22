@@ -12,6 +12,11 @@ const registerSchema = z.object({
   email: z.string().email().transform((e) => e.toLowerCase()),
 });
 
+const studentSignupSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email().transform((e) => e.toLowerCase()),
+});
+
 const otpRequestSchema = z.object({
   email: z.string().email().transform((e) => e.toLowerCase()),
 });
@@ -44,6 +49,23 @@ export default async function authRoutes(fastify: FastifyInstance) {
       },
     });
 
+    await issueOtpForEmail(body.email);
+
+    return reply.code(201).send({ message: GENERIC_OTP_SENT_MESSAGE });
+  });
+
+  // Self-service: a student creates their own account (independent of any
+  // institute), then gets invited into one or more institutes by email —
+  // whichever order that happens in, the email is what links them together.
+  fastify.post("/student/signup", async (request, reply) => {
+    const body = studentSignupSchema.parse(request.body);
+
+    const existing = await resolveIdentityByEmail(body.email);
+    if (existing) {
+      return reply.code(409).send({ error: "An account with this email already exists" });
+    }
+
+    await prisma.studentAccount.create({ data: { name: body.name, email: body.email } });
     await issueOtpForEmail(body.email);
 
     return reply.code(201).send({ message: GENERIC_OTP_SENT_MESSAGE });
@@ -113,14 +135,13 @@ export default async function authRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const student = await prisma.student.findUnique({ where: { id: request.user.studentId } });
-    if (!student) return reply.code(404).send({ error: "Not found" });
+    const account = await prisma.studentAccount.findUnique({ where: { id: request.user.studentAccountId } });
+    if (!account) return reply.code(404).send({ error: "Not found" });
     return reply.send({
       kind: "STUDENT",
-      id: student.id,
-      name: student.name,
-      email: student.portalEmail,
-      instituteId: student.instituteId,
+      id: account.id,
+      name: account.name,
+      email: account.email,
     });
   });
 }

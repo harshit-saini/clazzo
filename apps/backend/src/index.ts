@@ -11,6 +11,8 @@ import batchRoutes from "./routes/batches.js";
 import scheduleRoutes from "./routes/schedule.js";
 import attendanceRoutes from "./routes/attendance.js";
 import feeRoutes from "./routes/fees.js";
+import gradeRoutes from "./routes/grades.js";
+import studentPortalRoutes from "./routes/studentPortal.js";
 
 const app = Fastify({ logger: true });
 
@@ -35,6 +37,8 @@ await app.register(batchRoutes, { prefix: "/api/batches" });
 await app.register(scheduleRoutes, { prefix: "/api" });
 await app.register(attendanceRoutes, { prefix: "/api" });
 await app.register(feeRoutes, { prefix: "/api" });
+await app.register(gradeRoutes, { prefix: "/api/grades" });
+await app.register(studentPortalRoutes, { prefix: "/api/student" });
 
 const port = Number(process.env.PORT ?? 3001);
 

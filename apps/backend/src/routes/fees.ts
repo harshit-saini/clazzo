@@ -33,7 +33,7 @@ export default async function feeRoutes(fastify: FastifyInstance) {
     const { batchId } = request.params as { batchId: string };
     const body = feeStructureSchema.parse(request.body);
 
-    const batch = await prisma.batch.findFirst({ where: { id: batchId, instituteId: request.user.instituteId } });
+    const batch = await prisma.batch.findFirst({ where: { id: batchId, instituteId: asStaff(request.user).instituteId } });
     if (!batch) return reply.code(404).send({ error: "Not found" });
 
     const structure = await prisma.feeStructure.upsert({
@@ -47,7 +47,7 @@ export default async function feeRoutes(fastify: FastifyInstance) {
 
   fastify.get("/batches/:batchId/fee-structure", async (request, reply) => {
     const { batchId } = request.params as { batchId: string };
-    const batch = await prisma.batch.findFirst({ where: { id: batchId, instituteId: request.user.instituteId } });
+    const batch = await prisma.batch.findFirst({ where: { id: batchId, instituteId: asStaff(request.user).instituteId } });
     if (!batch) return reply.code(404).send({ error: "Not found" });
 
     const structure = await prisma.feeStructure.findUnique({ where: { batchId } });
@@ -60,7 +60,7 @@ export default async function feeRoutes(fastify: FastifyInstance) {
 
     return prisma.feeInvoice.findMany({
       where: {
-        student: { instituteId: request.user.instituteId },
+        student: { instituteId: asStaff(request.user).instituteId },
         ...(status ? { status: status as "PENDING" | "PARTIAL" | "PAID" | "OVERDUE" } : {}),
       },
       include: {
@@ -73,7 +73,7 @@ export default async function feeRoutes(fastify: FastifyInstance) {
 
   fastify.get("/students/:studentId/invoices", async (request, reply) => {
     const { studentId } = request.params as { studentId: string };
-    const student = await prisma.student.findFirst({ where: { id: studentId, instituteId: request.user.instituteId } });
+    const student = await prisma.student.findFirst({ where: { id: studentId, instituteId: asStaff(request.user).instituteId } });
     if (!student) return reply.code(404).send({ error: "Not found" });
 
     return prisma.feeInvoice.findMany({
@@ -87,7 +87,7 @@ export default async function feeRoutes(fastify: FastifyInstance) {
     const { studentId } = request.params as { studentId: string };
     const body = createInvoiceSchema.parse(request.body);
 
-    const student = await prisma.student.findFirst({ where: { id: studentId, instituteId: request.user.instituteId } });
+    const student = await prisma.student.findFirst({ where: { id: studentId, instituteId: asStaff(request.user).instituteId } });
     if (!student) return reply.code(404).send({ error: "Not found" });
 
     const invoice = await prisma.feeInvoice.create({
@@ -99,11 +99,12 @@ export default async function feeRoutes(fastify: FastifyInstance) {
 
   // ── Payments ────────────────────────────────────────────────────────
   fastify.post("/invoices/:invoiceId/payments", async (request, reply) => {
+    const staff = asStaff(request.user);
     const { invoiceId } = request.params as { invoiceId: string };
     const body = recordPaymentSchema.parse(request.body);
 
     const invoice = await prisma.feeInvoice.findUnique({ where: { id: invoiceId }, include: { student: true } });
-    if (!invoice || invoice.student.instituteId !== request.user.instituteId) {
+    if (!invoice || invoice.student.instituteId !== staff.instituteId) {
       return reply.code(404).send({ error: "Not found" });
     }
 
@@ -114,7 +115,7 @@ export default async function feeRoutes(fastify: FastifyInstance) {
         method: body.method,
         paidAt: body.paidAt,
         notes: body.notes,
-        recordedById: asStaff(request.user).userId,
+        recordedById: staff.userId,
       },
     });
 

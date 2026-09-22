@@ -30,7 +30,7 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
         attendance: { include: { student: { select: { id: true, name: true } } } },
       },
     });
-    if (!session || session.batch.instituteId !== request.user.instituteId) {
+    if (!session || session.batch.instituteId !== asStaff(request.user).instituteId) {
       return reply.code(404).send({ error: "Not found" });
     }
 
@@ -53,12 +53,11 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     const { sessionId } = request.params as { sessionId: string };
     const { records } = markAttendanceSchema.parse(request.body);
 
+    const staff = asStaff(request.user);
     const session = await prisma.classSession.findUnique({ where: { id: sessionId }, include: { batch: true } });
-    if (!session || session.batch.instituteId !== request.user.instituteId) {
+    if (!session || session.batch.instituteId !== staff.instituteId) {
       return reply.code(404).send({ error: "Not found" });
     }
-
-    const staff = asStaff(request.user);
 
     const studentIds = records.map((r) => r.studentId);
     const validEnrollments = await prisma.enrollment.count({
@@ -90,7 +89,7 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
   fastify.get("/students/:studentId/attendance", async (request, reply) => {
     const { studentId } = request.params as { studentId: string };
 
-    const student = await prisma.student.findFirst({ where: { id: studentId, instituteId: request.user.instituteId } });
+    const student = await prisma.student.findFirst({ where: { id: studentId, instituteId: asStaff(request.user).instituteId } });
     if (!student) return reply.code(404).send({ error: "Not found" });
 
     return prisma.attendance.findMany({

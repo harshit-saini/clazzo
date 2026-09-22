@@ -3,12 +3,14 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { asStaff, resolveIdentityByEmail } from "../auth/identity.js";
 import { sendInviteEmail } from "../email/resend.js";
+import { assertGradeInInstitute } from "../lib/grades.js";
 
 const createStudentSchema = z.object({
   name: z.string().min(1),
   phone: z.string().optional(),
   guardianName: z.string().optional(),
   guardianPhone: z.string().optional(),
+  gradeId: z.string().optional(),
 });
 
 const updateStudentSchema = createStudentSchema.partial();
@@ -26,7 +28,7 @@ export default async function studentRoutes(fastify: FastifyInstance) {
 
     return prisma.student.findMany({
       where: {
-        instituteId: request.user.instituteId,
+        instituteId: asStaff(request.user).instituteId,
         isActive: true,
         ...(batchId ? { enrollments: { some: { batchId, status: "ACTIVE" } } } : {}),
         ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
@@ -37,7 +39,8 @@ export default async function studentRoutes(fastify: FastifyInstance) {
         phone: true,
         guardianName: true,
         guardianPhone: true,
-        portalEmail: true,
+        grade: { select: { id: true, name: true } },
+        studentAccountId: true,
         invitedAt: true,
         createdAt: true,
         enrollments: {
@@ -52,8 +55,9 @@ export default async function studentRoutes(fastify: FastifyInstance) {
   fastify.get("/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     const student = await prisma.student.findFirst({
-      where: { id, instituteId: request.user.instituteId },
+      where: { id, instituteId: asStaff(request.user).instituteId },
       include: {
+        grade: true,
         enrollments: { include: { batch: true } },
         invoices: { include: { payments: true }, orderBy: { dueDate: "desc" } },
       },
@@ -64,9 +68,10 @@ export default async function studentRoutes(fastify: FastifyInstance) {
 
   fastify.post("/", async (request, reply) => {
     const body = createStudentSchema.parse(request.body);
+    await assertGradeInInstitute(body.gradeId, asStaff(request.user).instituteId);
 
     const student = await prisma.student.create({
-      data: { instituteId: request.user.instituteId, ...body },
+      data: { instituteId: asStaff(request.user).instituteId, ...body },
     });
 
     return reply.code(201).send(student);
@@ -75,8 +80,9 @@ export default async function studentRoutes(fastify: FastifyInstance) {
   fastify.patch("/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = updateStudentSchema.parse(request.body);
+    await assertGradeInInstitute(body.gradeId, asStaff(request.user).instituteId);
 
-    const existing = await prisma.student.findFirst({ where: { id, instituteId: request.user.instituteId } });
+    const existing = await prisma.student.findFirst({ where: { id, instituteId: asStaff(request.user).instituteId } });
     if (!existing) return reply.code(404).send({ error: "Not found" });
 
     return prisma.student.update({ where: { id }, data: body });
@@ -84,7 +90,7 @@ export default async function studentRoutes(fastify: FastifyInstance) {
 
   fastify.delete("/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const existing = await prisma.student.findFirst({ where: { id, instituteId: request.user.instituteId } });
+    const existing = await prisma.student.findFirst({ where: { id, instituteId: asStaff(request.user).instituteId } });
     if (!existing) return reply.code(404).send({ error: "Not found" });
 
     await prisma.student.update({ where: { id }, data: { isActive: false } });
@@ -93,31 +99,47 @@ export default async function studentRoutes(fastify: FastifyInstance) {
 
   // Grants the student passwordless portal access and emails them the news —
   // no separate "accept invite" step; their first OTP request activates it.
+  // The email resolves-or-creates a global StudentAccount, so a student who
+  // already has an account elsewhere (or signed up themselves) just gets
+  // this institute linked onto it, rather than a duplicate identity.
   fastify.post("/:id/invite", async (request, reply) => {
+    const staff = asStaff(request.user);
     const { id } = request.params as { id: string };
     const { email } = inviteSchema.parse(request.body);
 
-    const student = await prisma.student.findFirst({ where: { id, instituteId: request.user.instituteId } });
+    const student = await prisma.student.findFirst({
+      where: { id, instituteId: staff.instituteId },
+      include: { studentAccount: true },
+    });
     if (!student) return reply.code(404).send({ error: "Not found" });
 
-    if (student.portalEmail && student.portalEmail !== email) {
+    if (student.studentAccount && student.studentAccount.email !== email) {
       return reply.code(409).send({ error: "This student already has portal access under a different email" });
     }
 
-    const existing = await resolveIdentityByEmail(email);
-    if (existing && !(existing.kind === "STUDENT" && existing.studentId === id)) {
-      return reply.code(409).send({ error: "An account with this email already exists" });
+    let accountId = student.studentAccountId;
+    if (!accountId) {
+      const existing = await resolveIdentityByEmail(email);
+      if (existing?.kind === "STAFF") {
+        return reply.code(409).send({ error: "An account with this email already exists" });
+      }
+
+      const account =
+        existing?.kind === "STUDENT"
+          ? await prisma.studentAccount.findUniqueOrThrow({ where: { id: existing.studentAccountId } })
+          : await prisma.studentAccount.create({ data: { name: student.name, email } });
+      accountId = account.id;
     }
 
-    const institute = await prisma.institute.findUniqueOrThrow({ where: { id: request.user.instituteId } });
+    const institute = await prisma.institute.findUniqueOrThrow({ where: { id: staff.instituteId } });
 
     const updated = await prisma.student.update({
       where: { id },
-      data: { portalEmail: email, invitedAt: new Date(), invitedById: asStaff(request.user).userId },
+      data: { studentAccountId: accountId, invitedAt: new Date(), invitedById: staff.userId },
     });
 
     await sendInviteEmail(email, student.name, institute.name);
 
-    return reply.send({ id: updated.id, portalEmail: updated.portalEmail, invitedAt: updated.invitedAt });
+    return reply.send({ id: updated.id, studentAccountId: updated.studentAccountId, invitedAt: updated.invitedAt });
   });
 }
