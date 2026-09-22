@@ -15,6 +15,7 @@ const enrollSchema = z.object({ studentId: z.string() });
 
 export default async function batchRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.authenticate);
+  fastify.addHook("preHandler", fastify.requireStaff);
 
   fastify.get("/", async (request) => {
     return prisma.batch.findMany({

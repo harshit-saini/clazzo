@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { asStaff } from "../auth/identity.js";
 
 const markAttendanceSchema = z.object({
   records: z
@@ -15,6 +16,7 @@ const markAttendanceSchema = z.object({
 
 export default async function attendanceRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.authenticate);
+  fastify.addHook("preHandler", fastify.requireStaff);
 
   // Returns one row per actively-enrolled student, defaulting to null status
   // for students who haven't been marked yet this session.
@@ -56,6 +58,8 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: "Not found" });
     }
 
+    const staff = asStaff(request.user);
+
     const studentIds = records.map((r) => r.studentId);
     const validEnrollments = await prisma.enrollment.count({
       where: { batchId: session.batchId, status: "ACTIVE", studentId: { in: studentIds } },
@@ -68,12 +72,12 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
       records.map((record) =>
         prisma.attendance.upsert({
           where: { classSessionId_studentId: { classSessionId: sessionId, studentId: record.studentId } },
-          update: { status: record.status, markedById: request.user.userId, markedAt: new Date() },
+          update: { status: record.status, markedById: staff.userId, markedAt: new Date() },
           create: {
             classSessionId: sessionId,
             studentId: record.studentId,
             status: record.status,
-            markedById: request.user.userId,
+            markedById: staff.userId,
           },
         })
       )

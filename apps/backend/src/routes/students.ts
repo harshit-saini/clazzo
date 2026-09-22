@@ -1,21 +1,25 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { hashPassword } from "../auth/password.js";
+import { asStaff, resolveIdentityByEmail } from "../auth/identity.js";
+import { sendInviteEmail } from "../email/resend.js";
 
 const createStudentSchema = z.object({
   name: z.string().min(1),
   phone: z.string().optional(),
   guardianName: z.string().optional(),
   guardianPhone: z.string().optional(),
-  portalEmail: z.string().email().optional(),
-  portalPassword: z.string().min(8).optional(),
 });
 
 const updateStudentSchema = createStudentSchema.partial();
 
+const inviteSchema = z.object({
+  email: z.string().email().transform((e) => e.toLowerCase()),
+});
+
 export default async function studentRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.authenticate);
+  fastify.addHook("preHandler", fastify.requireStaff);
 
   fastify.get("/", async (request) => {
     const { batchId, search } = request.query as { batchId?: string; search?: string };
@@ -34,6 +38,7 @@ export default async function studentRoutes(fastify: FastifyInstance) {
         guardianName: true,
         guardianPhone: true,
         portalEmail: true,
+        invitedAt: true,
         createdAt: true,
         enrollments: {
           where: { status: "ACTIVE" },
@@ -54,31 +59,17 @@ export default async function studentRoutes(fastify: FastifyInstance) {
       },
     });
     if (!student) return reply.code(404).send({ error: "Not found" });
-    const { portalPasswordHash: _portalPasswordHash, ...safe } = student;
-    return safe;
+    return student;
   });
 
   fastify.post("/", async (request, reply) => {
     const body = createStudentSchema.parse(request.body);
 
-    if (body.portalEmail && !body.portalPassword) {
-      return reply.code(400).send({ error: "portalPassword is required when portalEmail is set" });
-    }
-
     const student = await prisma.student.create({
-      data: {
-        instituteId: request.user.instituteId,
-        name: body.name,
-        phone: body.phone,
-        guardianName: body.guardianName,
-        guardianPhone: body.guardianPhone,
-        portalEmail: body.portalEmail,
-        portalPasswordHash: body.portalPassword ? await hashPassword(body.portalPassword) : undefined,
-      },
+      data: { instituteId: request.user.instituteId, ...body },
     });
 
-    const { portalPasswordHash: _portalPasswordHash, ...safe } = student;
-    return reply.code(201).send(safe);
+    return reply.code(201).send(student);
   });
 
   fastify.patch("/:id", async (request, reply) => {
@@ -88,20 +79,7 @@ export default async function studentRoutes(fastify: FastifyInstance) {
     const existing = await prisma.student.findFirst({ where: { id, instituteId: request.user.instituteId } });
     if (!existing) return reply.code(404).send({ error: "Not found" });
 
-    const student = await prisma.student.update({
-      where: { id },
-      data: {
-        name: body.name,
-        phone: body.phone,
-        guardianName: body.guardianName,
-        guardianPhone: body.guardianPhone,
-        portalEmail: body.portalEmail,
-        portalPasswordHash: body.portalPassword ? await hashPassword(body.portalPassword) : undefined,
-      },
-    });
-
-    const { portalPasswordHash: _portalPasswordHash, ...safe } = student;
-    return safe;
+    return prisma.student.update({ where: { id }, data: body });
   });
 
   fastify.delete("/:id", async (request, reply) => {
@@ -111,5 +89,35 @@ export default async function studentRoutes(fastify: FastifyInstance) {
 
     await prisma.student.update({ where: { id }, data: { isActive: false } });
     return reply.code(204).send();
+  });
+
+  // Grants the student passwordless portal access and emails them the news —
+  // no separate "accept invite" step; their first OTP request activates it.
+  fastify.post("/:id/invite", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { email } = inviteSchema.parse(request.body);
+
+    const student = await prisma.student.findFirst({ where: { id, instituteId: request.user.instituteId } });
+    if (!student) return reply.code(404).send({ error: "Not found" });
+
+    if (student.portalEmail && student.portalEmail !== email) {
+      return reply.code(409).send({ error: "This student already has portal access under a different email" });
+    }
+
+    const existing = await resolveIdentityByEmail(email);
+    if (existing && !(existing.kind === "STUDENT" && existing.studentId === id)) {
+      return reply.code(409).send({ error: "An account with this email already exists" });
+    }
+
+    const institute = await prisma.institute.findUniqueOrThrow({ where: { id: request.user.instituteId } });
+
+    const updated = await prisma.student.update({
+      where: { id },
+      data: { portalEmail: email, invitedAt: new Date(), invitedById: asStaff(request.user).userId },
+    });
+
+    await sendInviteEmail(email, student.name, institute.name);
+
+    return reply.send({ id: updated.id, portalEmail: updated.portalEmail, invitedAt: updated.invitedAt });
   });
 }

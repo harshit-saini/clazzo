@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { recalculateInvoiceStatus } from "../lib/invoices.js";
+import { asStaff } from "../auth/identity.js";
 
 const feeStructureSchema = z.object({
   amount: z.coerce.number().positive(),
@@ -25,6 +26,7 @@ const recordPaymentSchema = z.object({
 
 export default async function feeRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.authenticate);
+  fastify.addHook("preHandler", fastify.requireStaff);
 
   // ── Fee structure (per batch) ──────────────────────────────────────
   fastify.put("/batches/:batchId/fee-structure", async (request, reply) => {
@@ -112,7 +114,7 @@ export default async function feeRoutes(fastify: FastifyInstance) {
         method: body.method,
         paidAt: body.paidAt,
         notes: body.notes,
-        recordedById: request.user.userId,
+        recordedById: asStaff(request.user).userId,
       },
     });
 

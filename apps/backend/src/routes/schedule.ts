@@ -22,6 +22,7 @@ async function assertBatchInInstitute(batchId: string, instituteId: string) {
 
 export default async function scheduleRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.authenticate);
+  fastify.addHook("preHandler", fastify.requireStaff);
 
   fastify.get("/batches/:batchId/schedule", async (request, reply) => {
     const { batchId } = request.params as { batchId: string };

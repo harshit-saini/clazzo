@@ -26,29 +26,48 @@ enum StaffRole {
 }
 
 /// A teacher or institute owner. Always has platform access (unlike Student).
+/// Passwordless — logs in via emailed OTP (see OtpCode).
 model User {
-  id           String    @id @default(cuid())
-  instituteId  String
-  institute    Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
-  name         String
-  email        String    @unique
-  passwordHash String
-  role         StaffRole @default(TEACHER)
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
+  id          String    @id @default(cuid())
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  name        String
+  email       String    @unique
+  role        StaffRole @default(TEACHER)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
 
-  taughtBatches   Batch[]      @relation("BatchPrimaryTeacher")
+  taughtBatches    Batch[]      @relation("BatchPrimaryTeacher")
   markedAttendance Attendance[] @relation("AttendanceMarkedBy")
   recordedPayments FeePayment[] @relation("PaymentRecordedBy")
+  invitedStudents  Student[]    @relation("StudentInvitedBy")
 
   @@index([instituteId])
+}
+
+// ─── Auth (passwordless OTP) ────────────────────────────────────────────
+
+/// A one-time login code emailed to a User or Student. Identity isn't
+/// stored here — verification re-resolves the email to whichever account
+/// owns it — so this table only ever needs to know the email and the code.
+model OtpCode {
+  id         String    @id @default(cuid())
+  email      String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([email])
 }
 
 // ─── Students & enrollment ──────────────────────────────────────────────
 
 /// A student the institute manages. Platform access is optional — most
-/// fields describe the student's real-world identity, and portalEmail /
-/// portalPasswordHash are only set for the subset who log in themselves.
+/// fields describe the student's real-world identity. portalEmail is only
+/// set for the subset who've been invited to self-service (passwordless,
+/// OTP-only login — see OtpCode); its presence alone means "has access".
 model Student {
   id            String   @id @default(cuid())
   instituteId   String
@@ -60,9 +79,11 @@ model Student {
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
 
-  // Optional self-service portal login — null when the student has no account.
-  portalEmail        String? @unique
-  portalPasswordHash String?
+  // Optional self-service portal access — null until a teacher invites them.
+  portalEmail String?   @unique
+  invitedAt   DateTime?
+  invitedById String?
+  invitedBy   User?     @relation("StudentInvitedBy", fields: [invitedById], references: [id])
 
   enrollments Enrollment[]
   attendance  Attendance[]

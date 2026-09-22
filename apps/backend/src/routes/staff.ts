@@ -1,17 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { hashPassword } from "../auth/password.js";
+import { resolveIdentityByEmail } from "../auth/identity.js";
+import { sendStaffWelcomeEmail } from "../email/resend.js";
 
 const createStaffSchema = z.object({
   name: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().min(8),
+  email: z.string().email().transform((e) => e.toLowerCase()),
   role: z.enum(["OWNER", "TEACHER"]).default("TEACHER"),
 });
 
 export default async function staffRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.authenticate);
+  fastify.addHook("preHandler", fastify.requireStaff);
 
   fastify.get("/", async (request) => {
     return prisma.user.findMany({
@@ -24,22 +25,18 @@ export default async function staffRoutes(fastify: FastifyInstance) {
   fastify.post("/", { preHandler: fastify.requireOwner }, async (request, reply) => {
     const body = createStaffSchema.parse(request.body);
 
-    const existing = await prisma.user.findUnique({ where: { email: body.email } });
+    const existing = await resolveIdentityByEmail(body.email);
     if (existing) {
       return reply.code(409).send({ error: "An account with this email already exists" });
     }
 
-    const passwordHash = await hashPassword(body.password);
+    const institute = await prisma.institute.findUniqueOrThrow({ where: { id: request.user.instituteId } });
     const staff = await prisma.user.create({
-      data: {
-        instituteId: request.user.instituteId,
-        name: body.name,
-        email: body.email,
-        passwordHash,
-        role: body.role,
-      },
+      data: { instituteId: request.user.instituteId, name: body.name, email: body.email, role: body.role },
       select: { id: true, name: true, email: true, role: true, createdAt: true },
     });
+
+    await sendStaffWelcomeEmail(staff.email, staff.name, institute.name);
 
     return reply.code(201).send(staff);
   });
