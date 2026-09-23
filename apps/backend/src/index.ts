@@ -27,7 +27,12 @@ app.setErrorHandler((error: FastifyError | ZodError, _request, reply) => {
   return reply.code(statusCode).send({ error: statusCode === 500 ? "Internal server error" : error.message });
 });
 
-await app.register(cors, { origin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173" });
+const allowedOrigins = (process.env.FRONTEND_ORIGIN ?? "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
+await app.register(cors, { origin: allowedOrigins });
 await app.register(authPlugin);
 
 app.get("/health", async () => ({ status: "ok" }));
