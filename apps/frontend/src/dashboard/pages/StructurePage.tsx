@@ -3,6 +3,9 @@ import { Link } from "react-router-dom";
 import { api, ApiError } from "../../lib/api";
 import { FormField, TextInput } from "../../components/FormField";
 import { Modal } from "../../components/Modal";
+import { ChevronRightIcon, PlusIcon } from "../../icons";
+
+const COLLAPSED_KEY = "clazzo_structure_collapsed";
 
 interface OrgLevel {
   id: string;
@@ -31,12 +34,34 @@ function rollUp(units: OrgUnit[], unit: OrgUnit) {
   };
 }
 
+function loadCollapsed(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
 export function StructurePage() {
   const [levels, setLevels] = useState<OrgLevel[] | null>(null);
   const [units, setUnits] = useState<OrgUnit[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [addingUnder, setAddingUnder] = useState<OrgUnit | null | undefined>(undefined);
   const [editingLevels, setEditingLevels] = useState(false);
+  // Collapsed rather than expanded, so a brand-new group is open by default.
+  const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
+
+  function persistCollapsed(next: Set<string>) {
+    setCollapsed(next);
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
+  }
+
+  function toggle(id: string) {
+    const next = new Set(collapsed);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    persistCollapsed(next);
+  }
 
   function load() {
     api.get<OrgLevel[]>("/api/structure/levels").then(setLevels);
@@ -64,37 +89,62 @@ export function StructurePage() {
   if (!levels || !units) return null;
 
   const roots = units.filter((u) => !u.parentId);
+  const parentIds = units.filter((u) => units.some((c) => c.parentId === u.id)).map((u) => u.id);
   const ladder = levels.map((l) => l.name).join(" › ") || "No levels defined";
+  const allCollapsed = parentIds.length > 0 && parentIds.every((id) => collapsed.has(id));
 
   return (
     <div>
-      <h1 style={{ fontSize: 26, marginBottom: 4 }}>Structure</h1>
-      <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 6 }}>
-        How your organization is arranged: <strong>{ladder}</strong>.{" "}
-        <button
-          type="button"
-          className="btn btn-ghost"
-          style={{ fontSize: 13, padding: 0 }}
-          onClick={() => setEditingLevels(true)}
-        >
-          Edit levels
-        </button>
-      </p>
-      <p style={{ color: "color-mix(in srgb, var(--color-text) 55%, transparent)", fontSize: 13, marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: 26, marginBottom: 4 }}>Structure</h1>
+          <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", margin: "0 0 6px" }}>
+            How your organization is arranged: <strong>{ladder}</strong>.{" "}
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ fontSize: 13, padding: 0 }}
+              onClick={() => setEditingLevels(true)}
+            >
+              Edit levels
+            </button>
+          </p>
+        </div>
+        {parentIds.length > 0 && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ fontSize: 13 }}
+            onClick={() => persistCollapsed(allCollapsed ? new Set() : new Set(parentIds))}
+          >
+            {allCollapsed ? "Expand all" : "Collapse all"}
+          </button>
+        )}
+      </div>
+
+      <p style={{ color: "color-mix(in srgb, var(--color-text) 55%, transparent)", fontSize: 13, marginBottom: 22 }}>
         Students enrolled in a group also count towards everything above it, and a subject added to a
         group is taught to everything inside it.
       </p>
 
       {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
 
-      <button type="button" className="btn btn-primary" style={{ marginBottom: 18 }} onClick={() => setAddingUnder(null)}>
-        Add {levels[0]?.name ?? "group"}
+      <button
+        type="button"
+        className="btn btn-primary"
+        style={{ marginBottom: 18, display: "inline-flex", alignItems: "center", gap: 7 }}
+        onClick={() => setAddingUnder(null)}
+      >
+        <PlusIcon size={15} /> Add {levels[0]?.name ?? "group"}
       </button>
 
       {roots.length === 0 ? (
-        <p style={{ color: "color-mix(in srgb, var(--color-text) 60%, transparent)" }}>
+        <div
+          className="card"
+          style={{ padding: 28, alignItems: "center", textAlign: "center", color: "var(--color-neutral-600)" }}
+        >
           Nothing set up yet — add your first {levels[0]?.name?.toLowerCase() ?? "group"} to get started.
-        </p>
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {roots.map((root) => (
@@ -103,6 +153,8 @@ export function StructurePage() {
               unit={root}
               units={units}
               levels={levels}
+              collapsed={collapsed}
+              onToggle={toggle}
               onAddChild={setAddingUnder}
               onArchive={handleArchive}
             />
@@ -140,61 +192,76 @@ function UnitNode({
   unit,
   units,
   levels,
+  collapsed,
+  onToggle,
   onAddChild,
   onArchive,
 }: {
   unit: OrgUnit;
   units: OrgUnit[];
   levels: OrgLevel[];
+  collapsed: Set<string>;
+  onToggle: (id: string) => void;
   onAddChild: (u: OrgUnit) => void;
   onArchive: (u: OrgUnit) => void;
 }) {
   const children = units.filter((u) => u.parentId === unit.id);
   const { students, courses } = rollUp(units, unit);
   const childLevel = levels.find((l) => l.depth === unit.depth + 1);
+  const isOpen = children.length > 0 && !collapsed.has(unit.id);
+
+  const childLabel = children.length
+    ? `${children.length} ${(childLevel?.name ?? "group").toLowerCase()}${children.length === 1 ? "" : "s"}`
+    : null;
 
   return (
-    <div style={{ marginLeft: unit.depth === 0 ? 0 : 22 }}>
-      <div
-        className="card"
-        style={{
-          padding: "12px 16px",
-          display: "flex",
-          // .card is a column flex container by default; these rows need to run across.
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-          borderLeft: unit.depth > 0 ? "3px solid var(--color-divider)" : undefined,
-        }}
-      >
-        <div style={{ flex: 1, minWidth: 180 }}>
-          <Link to={`/dashboard/structure/${unit.id}`} style={{ fontWeight: 600 }}>
+    <div>
+      <div className={`tree-row${unit.depth > 0 ? " tree-row-nested" : ""}`}>
+        <button
+          type="button"
+          className={`tree-toggle${isOpen ? " tree-toggle-open" : ""}${children.length === 0 ? " tree-toggle-leaf" : ""}`}
+          aria-label={isOpen ? `Collapse ${unit.name}` : `Expand ${unit.name}`}
+          aria-expanded={children.length > 0 ? isOpen : undefined}
+          onClick={() => onToggle(unit.id)}
+        >
+          <ChevronRightIcon size={15} />
+        </button>
+
+        <div className="tree-main">
+          <Link to={`/dashboard/structure/${unit.id}`} className="tree-name">
             {unit.name}
           </Link>
-          <div style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 60%, transparent)" }}>
-            {unit.level?.name ?? `Level ${unit.depth + 1}`} · {students} student{students === 1 ? "" : "s"} ·{" "}
-            {courses} subject{courses === 1 ? "" : "s"}
-          </div>
+          <span className="tree-meta">
+            {students} student{students === 1 ? "" : "s"} · {courses} subject{courses === 1 ? "" : "s"}
+            {/* Collapsing shouldn't hide that anything is in there. */}
+            {childLabel && !isOpen ? ` · ${childLabel}` : ""}
+          </span>
         </div>
-        {childLevel && (
-          <button type="button" className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => onAddChild(unit)}>
-            Add {childLevel.name}
+
+        {unit.level && <span className="tree-level-pill">{unit.level.name}</span>}
+
+        <div className="tree-actions">
+          {childLevel && (
+            <button type="button" className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => onAddChild(unit)}>
+              Add {childLevel.name}
+            </button>
+          )}
+          <button type="button" className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => onArchive(unit)}>
+            Archive
           </button>
-        )}
-        <button type="button" className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => onArchive(unit)}>
-          Archive
-        </button>
+        </div>
       </div>
 
-      {children.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+      {isOpen && (
+        <div className="tree-children">
           {children.map((child) => (
             <UnitNode
               key={child.id}
               unit={child}
               units={units}
               levels={levels}
+              collapsed={collapsed}
+              onToggle={onToggle}
               onAddChild={onAddChild}
               onArchive={onArchive}
             />
