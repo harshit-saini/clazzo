@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api, ApiError } from "../../lib/api";
 import { DataTable } from "../../components/DataTable";
 import { Modal } from "../../components/Modal";
@@ -26,9 +26,9 @@ interface StudentDetail {
   phone: string | null;
   guardianName: string | null;
   guardianPhone: string | null;
-  grade: { id: string; name: string } | null;
   consentStatus: string;
-  enrollments: { batch: { id: string; name: string; subject: string | null } }[];
+  enrollments: { orgUnit: { id: string; name: string } }[];
+  courseEnrollments: { course: { id: string; name: string } }[];
   invoices: Invoice[];
 }
 
@@ -50,19 +50,39 @@ export function StudentDetailPage() {
     <div>
       <h1 style={{ fontSize: 26, marginBottom: 4 }}>{student.name}</h1>
       <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 24 }}>
-        {student.grade?.name ?? "No grade set"} · {student.phone ?? "No phone on file"}
+        {student.enrollments.map((e) => e.orgUnit.name).join(", ") || "Not in a group yet"} ·{" "}
+        {student.phone ?? "No phone on file"}
       </p>
 
-      <h2 style={{ fontSize: 18, marginBottom: 10 }}>Enrolled courses</h2>
+      <h2 style={{ fontSize: 18, marginBottom: 10 }}>Groups</h2>
       <DataTable
         rows={student.enrollments}
-        rowKey={(e) => e.batch.id}
-        emptyMessage="Not enrolled in any batch yet."
+        rowKey={(e) => e.orgUnit.id}
+        emptyMessage="Not in any group yet."
         columns={[
-          { header: "Batch", render: (e) => e.batch.name },
-          { header: "Subject", render: (e) => e.batch.subject ?? "—" },
+          {
+            header: "Group",
+            render: (e) => <Link to={`/dashboard/structure/${e.orgUnit.id}`}>{e.orgUnit.name}</Link>,
+          },
         ]}
       />
+
+      {student.courseEnrollments.length > 0 && (
+        <>
+          <h2 style={{ fontSize: 18, margin: "28px 0 10px" }}>Electives</h2>
+          <DataTable
+            rows={student.courseEnrollments}
+            rowKey={(c) => c.course.id}
+            emptyMessage=""
+            columns={[
+              {
+                header: "Subject",
+                render: (c) => <Link to={`/dashboard/courses/${c.course.id}`}>{c.course.name}</Link>,
+              },
+            ]}
+          />
+        </>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "28px 0 10px" }}>
         <h2 style={{ fontSize: 18, margin: 0 }}>Fees</h2>
@@ -94,7 +114,7 @@ export function StudentDetailPage() {
       {showInvoice && (
         <NewInvoiceModal
           studentId={student.id}
-          batches={student.enrollments.map((e) => e.batch)}
+          units={student.enrollments.map((e) => e.orgUnit)}
           onClose={() => setShowInvoice(false)}
           onCreated={load}
         />
@@ -106,16 +126,16 @@ export function StudentDetailPage() {
 
 function NewInvoiceModal({
   studentId,
-  batches,
+  units,
   onClose,
   onCreated,
 }: {
   studentId: string;
-  batches: { id: string; name: string }[];
+  units: { id: string; name: string }[];
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [form, setForm] = useState({ batchId: batches[0]?.id ?? "", amount: "", dueDate: "" });
+  const [form, setForm] = useState({ orgUnitId: units[0]?.id ?? "", amount: "", dueDate: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -125,7 +145,7 @@ function NewInvoiceModal({
     setBusy(true);
     try {
       await api.post(`/api/students/${studentId}/invoices`, {
-        batchId: form.batchId || undefined,
+        orgUnitId: form.orgUnitId || undefined,
         amount: Number(form.amount),
         dueDate: form.dueDate,
       });
@@ -141,12 +161,12 @@ function NewInvoiceModal({
   return (
     <Modal title="New invoice" onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        {batches.length > 0 && (
-          <FormField label="Batch">
-            <Select value={form.batchId} onChange={(e) => setForm({ ...form, batchId: e.target.value })}>
-              {batches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
+        {units.length > 0 && (
+          <FormField label="Group">
+            <Select value={form.orgUnitId} onChange={(e) => setForm({ ...form, orgUnitId: e.target.value })}>
+              {units.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
                 </option>
               ))}
             </Select>

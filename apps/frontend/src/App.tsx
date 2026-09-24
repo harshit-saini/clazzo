@@ -10,12 +10,13 @@ import { DashboardLayout } from "./dashboard/DashboardLayout";
 import { DashboardHome } from "./dashboard/pages/DashboardHome";
 import { StudentsPage } from "./dashboard/pages/StudentsPage";
 import { StudentDetailPage } from "./dashboard/pages/StudentDetailPage";
-import { BatchesPage } from "./dashboard/pages/BatchesPage";
-import { BatchDetailPage } from "./dashboard/pages/BatchDetailPage";
+import { StructurePage } from "./dashboard/pages/StructurePage";
+import { UnitDetailPage } from "./dashboard/pages/UnitDetailPage";
 import { AttendanceMarkPage } from "./dashboard/pages/AttendanceMarkPage";
 import { FeesPage } from "./dashboard/pages/FeesPage";
 import { StaffPage } from "./dashboard/pages/StaffPage";
-import { GradesPage } from "./dashboard/pages/GradesPage";
+import { CoursesPage } from "./dashboard/pages/CoursesPage";
+import { CourseDetailPage } from "./dashboard/pages/CourseDetailPage";
 import { PortalLayout } from "./portal/PortalLayout";
 import { PortalHome } from "./portal/pages/PortalHome";
 import { InstituteDetailPage } from "./portal/pages/InstituteDetailPage";
@@ -37,12 +38,13 @@ export default function App() {
               <Route index element={<DashboardHome />} />
               <Route path="students" element={<StudentsPage />} />
               <Route path="students/:id" element={<StudentDetailPage />} />
-              <Route path="batches" element={<BatchesPage />} />
-              <Route path="batches/:id" element={<BatchDetailPage />} />
+              <Route path="structure" element={<StructurePage />} />
+              <Route path="structure/:id" element={<UnitDetailPage />} />
+              <Route path="courses" element={<CoursesPage />} />
+              <Route path="courses/:id" element={<CourseDetailPage />} />
               <Route path="attendance/:sessionId" element={<AttendanceMarkPage />} />
               <Route path="fees" element={<FeesPage />} />
               <Route path="staff" element={<StaffPage />} />
-              <Route path="grades" element={<GradesPage />} />
             </Route>
           </Route>
 

@@ -12,10 +12,9 @@ interface Student {
   guardianName: string | null;
   guardianPhone: string | null;
   guardianEmail: string | null;
-  grade: { id: string; name: string } | null;
   studentAccountId: string | null;
   consentStatus: "NOT_REQUIRED" | "PENDING" | "CONFIRMED";
-  enrollments: { batch: { id: string; name: string } }[];
+  enrollments: { orgUnit: { id: string; name: string; depth: number } }[];
 }
 
 export function StudentsPage() {
@@ -63,8 +62,7 @@ export function StudentsPage() {
           emptyMessage="No students yet."
           columns={[
             { header: "Name", render: (s) => <Link to={`/dashboard/students/${s.id}`}>{s.name}</Link> },
-            { header: "Grade", render: (s) => s.grade?.name ?? "—" },
-            { header: "Courses", render: (s) => s.enrollments.map((e) => e.batch.name).join(", ") || "—" },
+            { header: "Groups", render: (s) => s.enrollments.map((e) => e.orgUnit.name).join(", ") || "—" },
             { header: "Portal access", render: (s) => accessLabel(s) },
             {
               header: "",

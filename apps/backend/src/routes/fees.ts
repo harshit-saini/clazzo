@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { recalculateInvoiceStatus } from "../lib/invoices.js";
 import { asStaff } from "../auth/identity.js";
 import { logAudit } from "../lib/audit.js";
+import { findOrgUnit } from "../lib/orgStructure.js";
 
 const feeStructureSchema = z.object({
   amount: z.coerce.number().positive(),
@@ -12,7 +13,7 @@ const feeStructureSchema = z.object({
 });
 
 const createInvoiceSchema = z.object({
-  batchId: z.string().optional(),
+  orgUnitId: z.string().optional(),
   amount: z.coerce.number().positive(),
   dueDate: z.coerce.date(),
   notes: z.string().optional(),
@@ -29,30 +30,30 @@ export default async function feeRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.authenticate);
   fastify.addHook("preHandler", fastify.requireStaff);
 
-  // ── Fee structure (per batch) ──────────────────────────────────────
-  fastify.put("/batches/:batchId/fee-structure", async (request, reply) => {
-    const { batchId } = request.params as { batchId: string };
+  // ── Fee structure (per org unit) ───────────────────────────────────
+  fastify.put("/units/:unitId/fee-structure", async (request, reply) => {
+    const { unitId } = request.params as { unitId: string };
     const body = feeStructureSchema.parse(request.body);
 
-    const batch = await prisma.batch.findFirst({ where: { id: batchId, instituteId: asStaff(request.user).instituteId } });
-    if (!batch) return reply.code(404).send({ error: "Not found" });
+    const unit = await findOrgUnit(unitId, asStaff(request.user).instituteId);
+    if (!unit) return reply.code(404).send({ error: "Not found" });
 
     const structure = await prisma.feeStructure.upsert({
-      where: { batchId },
+      where: { orgUnitId: unitId },
       update: body,
-      create: { batchId, ...body },
+      create: { orgUnitId: unitId, ...body },
     });
 
     return reply.send(structure);
   });
 
-  fastify.get("/batches/:batchId/fee-structure", async (request, reply) => {
-    const { batchId } = request.params as { batchId: string };
-    const batch = await prisma.batch.findFirst({ where: { id: batchId, instituteId: asStaff(request.user).instituteId } });
-    if (!batch) return reply.code(404).send({ error: "Not found" });
+  fastify.get("/units/:unitId/fee-structure", async (request, reply) => {
+    const { unitId } = request.params as { unitId: string };
+    const unit = await findOrgUnit(unitId, asStaff(request.user).instituteId);
+    if (!unit) return reply.code(404).send({ error: "Not found" });
 
-    const structure = await prisma.feeStructure.findUnique({ where: { batchId } });
-    return structure ?? reply.code(404).send({ error: "No fee structure set for this batch" });
+    const structure = await prisma.feeStructure.findUnique({ where: { orgUnitId: unitId } });
+    return structure ?? reply.code(404).send({ error: "No fee structure set for this group" });
   });
 
   // ── Invoices ────────────────────────────────────────────────────────
@@ -92,7 +93,7 @@ export default async function feeRoutes(fastify: FastifyInstance) {
     if (!student) return reply.code(404).send({ error: "Not found" });
 
     const invoice = await prisma.feeInvoice.create({
-      data: { studentId, batchId: body.batchId, amount: body.amount, dueDate: body.dueDate, notes: body.notes },
+      data: { studentId, orgUnitId: body.orgUnitId, amount: body.amount, dueDate: body.dueDate, notes: body.notes },
     });
 
     return reply.code(201).send(invoice);

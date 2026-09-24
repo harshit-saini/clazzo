@@ -61,7 +61,7 @@ export function AttendanceMarkPage() {
         ))}
       </div>
 
-      {roster.length === 0 && <p>No students enrolled in this batch.</p>}
+      {roster.length === 0 && <p>Nobody is on this session's roster yet.</p>}
 
       <div style={{ display: "grid", gap: 10 }}>
         {roster.map((row) => (

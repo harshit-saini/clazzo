@@ -8,17 +8,30 @@ datasource db {
 
 // ─── Tenancy & staff ────────────────────────────────────────────────────
 
-/// A coaching institute or an individual teacher's account. The tenant
-/// boundary — every other model hangs off one institute.
+/// What shape of organization this is. Only decides which OrgLevel ladder
+/// gets seeded at registration (see ORG_TEMPLATES) and some UI wording —
+/// the structure itself is fully editable afterwards, so this is a
+/// starting point rather than a constraint.
+enum OrgType {
+  SCHOOL
+  COLLEGE
+  COACHING
+  TUTOR
+}
+
+/// A school, college, coaching center, or individual teacher's account.
+/// The tenant boundary — every other model hangs off one institute.
 model Institute {
   id        String   @id @default(cuid())
   name      String
+  type      OrgType  @default(COACHING)
   createdAt DateTime @default(now())
 
   users     User[]
   students  Student[]
-  batches   Batch[]
-  grades    Grade[]
+  orgLevels OrgLevel[]
+  orgUnits  OrgUnit[]
+  courses   Course[]
 }
 
 enum StaffRole {
@@ -38,7 +51,7 @@ model User {
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
 
-  taughtBatches    Batch[]      @relation("BatchPrimaryTeacher")
+  taughtCourses    Course[]     @relation("CourseTeacher")
   markedAttendance Attendance[] @relation("AttendanceMarkedBy")
   recordedPayments FeePayment[] @relation("PaymentRecordedBy")
   invitedStudents  Student[]    @relation("StudentInvitedBy")
@@ -74,9 +87,9 @@ model OtpCode {
 model AuditLog {
   id          String   @id @default(cuid())
   instituteId String?
-  actorType   String   // "STAFF" | "STUDENT" | "SYSTEM"
+  actorType   String // "STAFF" | "STUDENT" | "SYSTEM"
   actorId     String?
-  action      String   // e.g. "student.invite", "attendance.mark", "payment.record"
+  action      String // e.g. "student.invite", "attendance.mark", "payment.record"
   entityType  String
   entityId    String
   metadata    Json?
@@ -84,6 +97,102 @@ model AuditLog {
 
   @@index([instituteId, createdAt])
   @@index([entityType, entityId])
+}
+
+// ─── Organization structure ─────────────────────────────────────────────
+
+/// One rung of an institute's structure ladder, e.g. a school's
+/// "Class" > "Section", a college's "Batch" > "Stream" > "Section", or a
+/// coaching center's single "Batch". Purely a naming/UI scheme: it tells
+/// the admin UI what to call a unit at a given depth ("Add a Section to
+/// Class 12"). Units may exist deeper than the deepest defined level.
+model OrgLevel {
+  id          String    @id @default(cuid())
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  name        String
+  depth       Int // 0 = outermost
+  createdAt   DateTime  @default(now())
+
+  units OrgUnit[]
+
+  @@unique([instituteId, depth])
+  @@index([instituteId])
+}
+
+/// A node in the institute's structure tree — the single model behind a
+/// school's "Class 12" and "Section A", a college's "Batch 2016" and
+/// "Mechanical BTech", and a coaching center's "Dropper Batch".
+///
+/// Students enroll into *any* unit, and a unit's roster is everyone
+/// enrolled in it or in any of its descendants — so enrolling students in
+/// sections automatically rolls them up into the class. `path` is a
+/// materialized "/ancestorId/.../selfId/" chain that makes both directions
+/// cheap: descendants are a prefix match on path, and ancestors are read
+/// straight out of the string with no query at all.
+model OrgUnit {
+  id          String    @id @default(cuid())
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  parentId    String?
+  parent      OrgUnit?  @relation("OrgUnitTree", fields: [parentId], references: [id])
+  children    OrgUnit[] @relation("OrgUnitTree")
+  levelId     String?
+  level       OrgLevel? @relation(fields: [levelId], references: [id])
+  name        String
+  path        String // "/rootId/.../selfId/" — includes self
+  depth       Int    @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  enrollments   Enrollment[]
+  courses       Course[]
+  scheduleSlots ScheduleSlot[]
+  sessions      ClassSession[]
+  invoices      FeeInvoice[]
+  feeStructure  FeeStructure?
+
+  @@index([instituteId, isActive])
+  @@index([instituteId, parentId])
+  @@index([path])
+}
+
+/// How a course decides who is taking it.
+enum CourseEnrollmentMode {
+  /// Everyone on the org unit's roster (including descendant units).
+  ALL_IN_UNIT
+  /// Only students with an explicit CourseEnrollment — for electives and
+  /// optional subjects, where one section splits across subjects.
+  SELECTED
+}
+
+/// A subject taught to one org unit by one teacher — "Physics for 12A",
+/// "Thermodynamics for Mechanical BTech", or the single subject an
+/// individual tutor teaches their batch.
+///
+/// Attaching a course to a parent unit cascades it to every descendant, so
+/// a school can put Maths on "Class 12" (both sections get it) while
+/// putting Biology on "12A" alone.
+model Course {
+  id             String               @id @default(cuid())
+  instituteId    String
+  institute      Institute            @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  orgUnitId      String
+  orgUnit        OrgUnit              @relation(fields: [orgUnitId], references: [id], onDelete: Cascade)
+  name           String
+  code           String?
+  teacherId      String?
+  teacher        User?                @relation("CourseTeacher", fields: [teacherId], references: [id])
+  enrollmentMode CourseEnrollmentMode @default(ALL_IN_UNIT)
+  isActive       Boolean              @default(true)
+  createdAt      DateTime             @default(now())
+
+  courseEnrollments CourseEnrollment[]
+  scheduleSlots     ScheduleSlot[]
+  sessions          ClassSession[]
+
+  @@index([instituteId, isActive])
+  @@index([orgUnitId])
 }
 
 // ─── Students & enrollment ──────────────────────────────────────────────
@@ -108,12 +217,12 @@ enum ConsentStatus {
 }
 
 /// A student's membership at one institute — their roster entry there:
-/// grade, enrollments, attendance, fees. Platform access is optional:
+/// enrollments, attendance, fees. Platform access is optional:
 /// studentAccountId is null until a teacher invites them (by email, which
 /// resolves-or-creates the StudentAccount) or the student signs up
 /// themselves and a teacher later invites the same email.
 model Student {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   instituteId   String
   institute     Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
   name          String
@@ -121,11 +230,8 @@ model Student {
   guardianName  String?
   guardianPhone String?
   guardianEmail String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-
-  gradeId String?
-  grade   Grade?  @relation(fields: [gradeId], references: [id])
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
 
   studentAccountId String?
   studentAccount   StudentAccount? @relation(fields: [studentAccountId], references: [id])
@@ -144,28 +250,13 @@ model Student {
   consentStatus      ConsentStatus @default(NOT_REQUIRED)
   consentConfirmedAt DateTime?
 
-  enrollments Enrollment[]
-  attendance  Attendance[]
-  invoices    FeeInvoice[]
+  enrollments       Enrollment[]
+  courseEnrollments CourseEnrollment[]
+  attendance        Attendance[]
+  invoices          FeeInvoice[]
 
   @@index([instituteId])
   @@index([studentAccountId])
-}
-
-/// A structured grade/section within one institute (e.g. "Class 7"), so
-/// batches and student memberships can be organized and browsed by it.
-model Grade {
-  id          String    @id @default(cuid())
-  instituteId String
-  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
-  name        String
-  createdAt   DateTime  @default(now())
-
-  batches  Batch[]
-  students Student[]
-
-  @@unique([instituteId, name])
-  @@index([instituteId])
 }
 
 enum EnrollmentStatus {
@@ -174,58 +265,57 @@ enum EnrollmentStatus {
   DROPPED
 }
 
-/// Join table: which batches a student is enrolled in.
+/// Which org unit a student sits in — their place in the structure tree.
+/// Usually one active row (a school student is in exactly one section),
+/// but several are allowed so a coaching student can attend more than one
+/// batch.
 model Enrollment {
   id         String           @id @default(cuid())
-  batchId    String
-  batch      Batch            @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  orgUnitId  String
+  orgUnit    OrgUnit          @relation(fields: [orgUnitId], references: [id], onDelete: Cascade)
   studentId  String
   student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
   status     EnrollmentStatus @default(ACTIVE)
   enrolledAt DateTime         @default(now())
 
-  @@unique([batchId, studentId])
+  @@unique([orgUnitId, studentId])
   @@index([studentId])
 }
 
-// ─── Batches & schedule ─────────────────────────────────────────────────
+/// Opts one student into one SELECTED-mode course. Unused for
+/// ALL_IN_UNIT courses, where the org unit's roster is the course roster.
+model CourseEnrollment {
+  id         String   @id @default(cuid())
+  courseId   String
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  enrolledAt DateTime @default(now())
 
-/// A course/batch — the unit students enroll into and get scheduled,
-/// billed and marked present against.
-model Batch {
-  id                String    @id @default(cuid())
-  instituteId       String
-  institute         Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
-  name              String
-  subject           String?
-  description       String?
-  primaryTeacherId  String?
-  primaryTeacher    User?     @relation("BatchPrimaryTeacher", fields: [primaryTeacherId], references: [id])
-  gradeId           String?
-  grade             Grade?    @relation(fields: [gradeId], references: [id])
-  isActive          Boolean   @default(true)
-  createdAt         DateTime  @default(now())
-
-  enrollments   Enrollment[]
-  scheduleSlots ScheduleSlot[]
-  sessions      ClassSession[]
-  feeStructure  FeeStructure?
-
-  @@index([instituteId])
+  @@unique([courseId, studentId])
+  @@index([studentId])
 }
 
+// ─── Schedule ───────────────────────────────────────────────────────────
+
 /// A recurring weekly time slot (e.g. "Mon/Wed/Fri 5–6pm") used to
-/// generate concrete ClassSession rows.
+/// generate concrete ClassSession rows. Belongs to an org unit, and
+/// optionally to one of its courses — a slot with no course is an
+/// unsubjected period, which is how a school books daily homeroom
+/// attendance for a section.
 model ScheduleSlot {
   id        String   @id @default(cuid())
-  batchId   String
-  batch     Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  dayOfWeek Int      // 0 = Sunday .. 6 = Saturday
-  startTime String   // "HH:mm", 24-hour
-  endTime   String   // "HH:mm", 24-hour
+  orgUnitId String
+  orgUnit   OrgUnit  @relation(fields: [orgUnitId], references: [id], onDelete: Cascade)
+  courseId  String?
+  course    Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  dayOfWeek Int // 0 = Sunday .. 6 = Saturday
+  startTime String // "HH:mm", 24-hour
+  endTime   String // "HH:mm", 24-hour
   createdAt DateTime @default(now())
 
-  @@index([batchId])
+  @@index([orgUnitId])
+  @@index([courseId])
 }
 
 enum SessionStatus {
@@ -238,18 +328,24 @@ enum SessionStatus {
 /// against. Generated from ScheduleSlots (or created ad hoc).
 model ClassSession {
   id        String        @id @default(cuid())
-  batchId   String
-  batch     Batch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  date      DateTime      // calendar date of the session (time-of-day zeroed)
-  startTime String        // "HH:mm"
-  endTime   String        // "HH:mm"
+  orgUnitId String
+  orgUnit   OrgUnit       @relation(fields: [orgUnitId], references: [id], onDelete: Cascade)
+  courseId  String?
+  course    Course?       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  date      DateTime // calendar date of the session (time-of-day zeroed)
+  startTime String // "HH:mm"
+  endTime   String // "HH:mm"
   status    SessionStatus @default(SCHEDULED)
   createdAt DateTime      @default(now())
 
   attendance Attendance[]
 
-  @@unique([batchId, date, startTime])
-  @@index([batchId, date])
+  // Guards against duplicate generation. Postgres treats NULLs as distinct,
+  // so this does not constrain course-less (homeroom) sessions — session
+  // generation does its own existence check to cover those.
+  @@unique([orgUnitId, courseId, date, startTime])
+  @@index([orgUnitId, date])
+  @@index([courseId, date])
 }
 
 // ─── Attendance ─────────────────────────────────────────────────────────
@@ -285,15 +381,15 @@ enum BillingCycle {
   QUARTERLY
 }
 
-/// What a batch costs, by default — used as a template when creating
+/// What an org unit costs, by default — used as a template when creating
 /// invoices; invoices themselves can still be amount-overridden per student.
 model FeeStructure {
   id            String       @id @default(cuid())
-  batchId       String       @unique
-  batch         Batch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  orgUnitId     String       @unique
+  orgUnit       OrgUnit      @relation(fields: [orgUnitId], references: [id], onDelete: Cascade)
   amount        Decimal      @db.Decimal(10, 2)
   billingCycle  BillingCycle @default(MONTHLY)
-  dueDayOfMonth Int?         // e.g. 5 -> due the 5th of each cycle
+  dueDayOfMonth Int? // e.g. 5 -> due the 5th of each cycle
   createdAt     DateTime     @default(now())
 }
 
@@ -310,7 +406,8 @@ model FeeInvoice {
   id        String        @id @default(cuid())
   studentId String
   student   Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  batchId   String?
+  orgUnitId String?
+  orgUnit   OrgUnit?      @relation(fields: [orgUnitId], references: [id])
   amount    Decimal       @db.Decimal(10, 2)
   dueDate   DateTime
   status    InvoiceStatus @default(PENDING)
@@ -335,15 +432,15 @@ enum PaymentMethod {
 /// A payment recorded against an invoice. An invoice can have several
 /// (partial payments); status on the invoice is derived from the sum.
 model FeePayment {
-  id             String        @id @default(cuid())
-  invoiceId      String
-  invoice        FeeInvoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  amount         Decimal       @db.Decimal(10, 2)
-  method         PaymentMethod
-  paidAt         DateTime      @default(now())
-  notes          String?
-  recordedById   String?
-  recordedBy     User?         @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+  id           String        @id @default(cuid())
+  invoiceId    String
+  invoice      FeeInvoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount       Decimal       @db.Decimal(10, 2)
+  method       PaymentMethod
+  paidAt       DateTime      @default(now())
+  notes        String?
+  recordedById String?
+  recordedBy   User?         @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
 
   @@index([invoiceId])
 }

@@ -4,15 +4,14 @@ import { prisma } from "../db.js";
 import { asStaff, resolveIdentityByEmail } from "../auth/identity.js";
 import { sendInviteEmail } from "../email/resend.js";
 import { issueConsentOtpForEmail } from "../auth/issueOtp.js";
-import { assertGradeInInstitute } from "../lib/grades.js";
 import { logAudit } from "../lib/audit.js";
+import { findOrgUnit } from "../lib/orgStructure.js";
 
 const createStudentSchema = z.object({
   name: z.string().min(1),
   phone: z.string().optional(),
   guardianName: z.string().optional(),
   guardianPhone: z.string().optional(),
-  gradeId: z.string().optional(),
 });
 
 const updateStudentSchema = createStudentSchema.partial();
@@ -26,14 +25,26 @@ export default async function studentRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.authenticate);
   fastify.addHook("preHandler", fastify.requireStaff);
 
-  fastify.get("/", async (request) => {
-    const { batchId, search } = request.query as { batchId?: string; search?: string };
+  // Filtering by orgUnitId includes students in that unit's descendants, so
+  // asking for "Class 12" returns everyone in 12A and 12B too.
+  fastify.get("/", async (request, reply) => {
+    const { instituteId } = asStaff(request.user);
+    const { orgUnitId, search } = request.query as { orgUnitId?: string; search?: string };
+
+    let unitPath: string | undefined;
+    if (orgUnitId) {
+      const unit = await findOrgUnit(orgUnitId, instituteId);
+      if (!unit) return reply.code(404).send({ error: "Group not found" });
+      unitPath = unit.path;
+    }
 
     return prisma.student.findMany({
       where: {
-        instituteId: asStaff(request.user).instituteId,
+        instituteId,
         isActive: true,
-        ...(batchId ? { enrollments: { some: { batchId, status: "ACTIVE" } } } : {}),
+        ...(unitPath
+          ? { enrollments: { some: { status: "ACTIVE", orgUnit: { path: { startsWith: unitPath } } } } }
+          : {}),
         ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
       },
       select: {
@@ -43,14 +54,13 @@ export default async function studentRoutes(fastify: FastifyInstance) {
         guardianName: true,
         guardianPhone: true,
         guardianEmail: true,
-        grade: { select: { id: true, name: true } },
         studentAccountId: true,
         consentStatus: true,
         invitedAt: true,
         createdAt: true,
         enrollments: {
           where: { status: "ACTIVE" },
-          select: { batch: { select: { id: true, name: true } } },
+          select: { orgUnit: { select: { id: true, name: true, depth: true } } },
         },
       },
       orderBy: { name: "asc" },
@@ -62,8 +72,8 @@ export default async function studentRoutes(fastify: FastifyInstance) {
     const student = await prisma.student.findFirst({
       where: { id, instituteId: asStaff(request.user).instituteId },
       include: {
-        grade: true,
-        enrollments: { include: { batch: true } },
+        enrollments: { include: { orgUnit: true } },
+        courseEnrollments: { include: { course: { select: { id: true, name: true } } } },
         invoices: { include: { payments: true }, orderBy: { dueDate: "desc" } },
       },
     });
@@ -74,7 +84,6 @@ export default async function studentRoutes(fastify: FastifyInstance) {
   fastify.post("/", async (request, reply) => {
     const staff = asStaff(request.user);
     const body = createStudentSchema.parse(request.body);
-    await assertGradeInInstitute(body.gradeId, staff.instituteId);
 
     const student = await prisma.student.create({
       data: { instituteId: staff.instituteId, ...body },
@@ -96,7 +105,6 @@ export default async function studentRoutes(fastify: FastifyInstance) {
     const staff = asStaff(request.user);
     const { id } = request.params as { id: string };
     const body = updateStudentSchema.parse(request.body);
-    await assertGradeInInstitute(body.gradeId, staff.instituteId);
 
     const existing = await prisma.student.findFirst({ where: { id, instituteId: staff.instituteId } });
     if (!existing) return reply.code(404).send({ error: "Not found" });

@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, ApiError } from "../../lib/api";
-import { FormField, TextInput } from "../../components/FormField";
+import { FormField, Select, TextInput } from "../../components/FormField";
 
 export function RegisterInstitutePage() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ instituteName: "", ownerName: "", email: "" });
+  const [form, setForm] = useState({ instituteName: "", ownerName: "", email: "", type: "COACHING" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -41,6 +41,14 @@ export function RegisterInstitutePage() {
           </>
         ) : (
           <form onSubmit={handleSubmit}>
+            <FormField label="What are you running?">
+              <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                <option value="SCHOOL">A school — classes and sections</option>
+                <option value="COLLEGE">A college — batches and streams</option>
+                <option value="COACHING">A coaching center — batches</option>
+                <option value="TUTOR">I teach on my own — batches</option>
+              </Select>
+            </FormField>
             <FormField label="Institute name">
               <TextInput
                 required
