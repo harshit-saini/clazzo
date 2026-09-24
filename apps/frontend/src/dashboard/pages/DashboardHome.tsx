@@ -6,7 +6,8 @@ import { DataTable } from "../../components/DataTable";
 
 interface Summary {
   activeStudentCount: number;
-  activeBatchCount: number;
+  activeUnitCount: number;
+  activeCourseCount: number;
   todaysSessionCount: number;
   unmarkedSessionCount: number;
   outstandingInvoiceCount: number;
@@ -16,7 +17,8 @@ interface Summary {
 
 interface TodaySession {
   id: string;
-  batch: { id: string; name: string; subject: string | null; primaryTeacher: { id: string; name: string } | null };
+  orgUnit: { id: string; name: string };
+  course: { id: string; name: string; teacher: { id: string; name: string } | null } | null;
   startTime: string;
   endTime: string;
   enrolledCount: number;
@@ -37,9 +39,9 @@ export function DashboardHome() {
       <h1 style={{ fontSize: 26, marginBottom: 20 }}>Dashboard</h1>
 
       {summary && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 32 }}>
+        <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 32 }}>
           <StatCard label="Active students" value={summary.activeStudentCount} />
-          <StatCard label="Active batches" value={summary.activeBatchCount} accent="accent-2" />
+          <StatCard label="Subjects" value={summary.activeCourseCount} accent="accent-2" />
           <StatCard label="Outstanding dues" value={`₹${summary.outstandingInvoiceTotal}`} />
           <StatCard label="Collected this month" value={`₹${summary.collectedThisMonthTotal}`} accent="accent-2" />
         </div>
@@ -55,8 +57,9 @@ export function DashboardHome() {
           emptyMessage="No classes scheduled today."
           columns={[
             { header: "Time", render: (s) => `${s.startTime} – ${s.endTime}` },
-            { header: "Batch", render: (s) => s.batch.name },
-            { header: "Teacher", render: (s) => s.batch.primaryTeacher?.name ?? "—" },
+            { header: "Group", render: (s) => s.orgUnit.name },
+            { header: "Subject", render: (s) => s.course?.name ?? "Whole group" },
+            { header: "Teacher", render: (s) => s.course?.teacher?.name ?? "—" },
             { header: "Attendance", render: (s) => `${s.markedCount} / ${s.enrolledCount} marked` },
             {
               header: "",

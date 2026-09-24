@@ -5,9 +5,10 @@ import { api } from "../../lib/api";
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 interface Course {
-  batchId: string;
+  courseId: string;
   name: string;
-  subject: string | null;
+  code: string | null;
+  group: { id: string; name: string };
   teacher: { id: string; name: string } | null;
   schedule: { dayOfWeek: number; startTime: string; endTime: string }[];
   attendance: { present: number; total: number };
@@ -27,8 +28,8 @@ interface Invoice {
 }
 
 interface InstituteDetail {
-  institute: { id: string; name: string };
-  grade: { id: string; name: string } | null;
+  institute: { id: string; name: string; type: string };
+  groups: { id: string; name: string; breadcrumb: string[] }[];
   consentStatus: string;
   courses: Course[];
   invoices: Invoice[];
@@ -48,16 +49,16 @@ export function InstituteDetailPage() {
     <div>
       <h1 style={{ fontSize: 26, marginBottom: 4 }}>{detail.institute.name}</h1>
       <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 28 }}>
-        {detail.grade?.name ?? "No grade set"}
+        {detail.groups.map((g) => g.breadcrumb.join(" › ")).join(", ") || "Not placed in a group yet"}
       </p>
 
-      <h2 style={{ fontSize: 18, marginBottom: 12 }}>Courses</h2>
+      <h2 style={{ fontSize: 18, marginBottom: 12 }}>Subjects</h2>
       <div style={{ display: "grid", gap: 12, marginBottom: 32 }}>
-        {detail.courses.length === 0 && <p>No active courses.</p>}
+        {detail.courses.length === 0 && <p>No subjects yet.</p>}
         {detail.courses.map((c) => {
           const pct = c.attendance.total > 0 ? Math.round((c.attendance.present / c.attendance.total) * 100) : null;
           return (
-            <div key={c.batchId} className="card elev-sm" style={{ padding: 20, gap: 8 }}>
+            <div key={c.courseId} className="card elev-sm" style={{ padding: 20, gap: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                 <span style={{ fontFamily: "var(--font-heading)", fontSize: 17 }}>{c.name}</span>
                 {pct !== null && (
@@ -67,7 +68,7 @@ export function InstituteDetailPage() {
                 )}
               </div>
               <p style={{ fontSize: 13.5, margin: 0, color: "color-mix(in srgb, var(--color-text) 65%, transparent)" }}>
-                {c.subject ?? "No subject"} · {c.teacher?.name ?? "No teacher assigned"}
+                {c.teacher?.name ?? "No teacher assigned"} · {c.group.name}
               </p>
               {c.schedule.length > 0 && (
                 <p style={{ fontSize: 13, margin: 0 }}>

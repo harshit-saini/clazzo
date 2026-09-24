@@ -6,7 +6,7 @@ import { DataTable } from "../../components/DataTable";
 interface AttendanceRow {
   id: string;
   status: string;
-  classSession: { date: string; batch: { name: string; subject: string | null } };
+  classSession: { date: string; orgUnit: { name: string }; course: { name: string } | null };
 }
 
 export function AttendanceHistoryPage() {
@@ -32,7 +32,7 @@ export function AttendanceHistoryPage() {
         emptyMessage="No attendance recorded yet."
         columns={[
           { header: "Date", render: (r) => new Date(r.classSession.date).toLocaleDateString() },
-          { header: "Course", render: (r) => r.classSession.batch.name },
+          { header: "Subject", render: (r) => r.classSession.course?.name ?? r.classSession.orgUnit.name },
           { header: "Status", render: (r) => r.status },
         ]}
       />
