@@ -327,3 +327,84 @@ html, body { overflow-x: hidden; }
 @media (max-width: 480px) {
   .card.elev-md, .card.elev-lg { padding: 24px !important; }
 }
+
+/* ─── Structure tree ──────────────────────────────────────────────────── */
+
+.tree-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid transparent;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.tree-row:hover {
+  border-color: var(--color-neutral-300);
+  box-shadow: var(--shadow-sm);
+}
+/* Nested rows sit lighter than their parent so depth reads at a glance. */
+.tree-row-nested {
+  background: color-mix(in srgb, var(--color-surface) 50%, var(--color-bg));
+}
+
+.tree-toggle {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-neutral-600);
+  cursor: pointer;
+}
+.tree-toggle:hover { background: var(--color-neutral-200); color: var(--color-text); }
+.tree-toggle svg { transition: transform 0.18s ease; }
+.tree-toggle-open svg { transform: rotate(90deg); }
+/* Leaves keep the same indent as their siblings, minus the affordance. */
+.tree-toggle-leaf { visibility: hidden; pointer-events: none; }
+
+.tree-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* Names and actions stay neutral so the tree reads as a hierarchy rather
+   than a wall of links; accent is reserved for hover. */
+.tree-name { font-weight: 600; font-size: 14.5px; color: var(--color-text); text-decoration: none; }
+.tree-name:hover { color: var(--color-accent-700); text-decoration: underline; }
+.tree-meta { font-size: 12.5px; color: var(--color-neutral-600); }
+.tree-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.tree-actions .btn-ghost { color: var(--color-neutral-600); }
+.tree-actions .btn-ghost:hover { color: var(--color-accent-700); }
+
+.tree-children {
+  margin: 8px 0 0 12px;
+  padding-left: 18px;
+  border-left: 1.5px solid var(--color-neutral-300);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tree-level-pill {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--color-neutral-200);
+  color: var(--color-neutral-700);
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .tree-children { margin-left: 2px; padding-left: 10px; }
+  /* Deep nesting leaves little room, so let the pill and actions drop to
+     their own line rather than squeezing the name. */
+  .tree-row { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+  .tree-main { flex: 1 1 60%; }
+  .tree-actions { width: 100%; justify-content: flex-end; }
+}

@@ -164,6 +164,22 @@ export function MenuIcon({ size = 24, color = "currentColor", strokeWidth = 2.75
   );
 }
 
+export function ChevronRightIcon({ size = 24, color = "currentColor", strokeWidth = 2.75 }: IconProps) {
+  return (
+    <svg {...base(size)} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 18l6-6-6-6" />
+    </svg>
+  );
+}
+
+export function PlusIcon({ size = 24, color = "currentColor", strokeWidth = 2.75 }: IconProps) {
+  return (
+    <svg {...base(size)} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
 export function XIcon({ size = 24, color = "currentColor", strokeWidth = 2.75 }: IconProps) {
   return (
     <svg {...base(size)} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">

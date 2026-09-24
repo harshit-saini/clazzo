@@ -70,7 +70,10 @@ export function AppShell({ brand, navItems, extra }: { brand: string; navItems: 
           </button>
         </div>
       </aside>
-      <main className="app-shell-main" style={{ flex: 1, padding: "32px 40px", maxWidth: 1100 }}>
+      {/* minWidth:0 lets this flex child shrink below its content's intrinsic
+          width — without it one wide row stretches the column past the viewport
+          and the page's own paragraphs get clipped. */}
+      <main className="app-shell-main" style={{ flex: 1, minWidth: 0, padding: "32px 40px", maxWidth: 1100 }}>
         <Outlet />
       </main>
     </div>
