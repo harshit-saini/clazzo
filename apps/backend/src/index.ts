@@ -32,7 +32,12 @@ const allowedOrigins = (process.env.FRONTEND_ORIGIN ?? "http://localhost:5173")
   .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
-await app.register(cors, { origin: allowedOrigins });
+// @fastify/cors only allows GET/HEAD/POST by default (unlike the older
+// `cors` package it wraps) — every PUT/PATCH/DELETE mutation in the app
+// (fee structures, renames, archiving, ...) was being CORS-blocked in a
+// real browser without this, even though it worked fine over curl or a
+// server-to-server fetch, neither of which enforce CORS.
+await app.register(cors, { origin: allowedOrigins, methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] });
 await app.register(authPlugin);
 
 app.get("/health", async () => ({ status: "ok" }));

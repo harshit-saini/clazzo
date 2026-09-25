@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { api, ApiError } from "../../lib/api";
 import { FormField, TextInput } from "../../components/FormField";
 import { Modal } from "../../components/Modal";
+import { LevelLadderEditor } from "../../components/LevelLadderEditor";
+import { ORG_TEMPLATES } from "../../lib/orgTemplates";
 import { ChevronRightIcon, PlusIcon } from "../../icons";
 
 const COLLAPSED_KEY = "clazzo_structure_collapsed";
@@ -333,6 +335,7 @@ function EditLevelsModal({
   onSaved: () => void;
 }) {
   const [names, setNames] = useState<string[]>(levels.map((l) => l.name));
+  const [templateHint, setTemplateHint] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function handleSave() {
@@ -358,32 +361,38 @@ function EditLevelsModal({
       }
     >
       <p style={{ fontSize: 13, marginTop: 0, color: "color-mix(in srgb, var(--color-text) 65%, transparent)" }}>
-        Name each level from the outside in — a school might use Class then Section, a college Batch then
-        Stream, a coaching center just Batch.
+        Name each level from the outside in — insert, remove, or rename below, or start from a template.
       </p>
-      {names.map((name, i) => (
-        <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-          <FormField label={`Level ${i + 1}`}>
-            <TextInput
-              value={name}
-              onChange={(e) => setNames(names.map((n, j) => (j === i ? e.target.value : n)))}
-            />
-          </FormField>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+        {ORG_TEMPLATES.map((t) => (
           <button
+            key={t.type}
             type="button"
-            className="btn btn-ghost"
-            style={{ fontSize: 13, height: 36 }}
-            onClick={() => setNames(names.filter((_, j) => j !== i))}
+            className="btn btn-secondary"
+            style={{ fontSize: 12.5 }}
+            onClick={() => {
+              setNames(t.levels);
+              setTemplateHint(t.description);
+            }}
           >
-            Remove
+            {t.label}
           </button>
-        </div>
-      ))}
-      {names.length < 6 && (
-        <button type="button" className="btn btn-secondary" style={{ marginTop: 8 }} onClick={() => setNames([...names, ""])}>
-          Add a level
-        </button>
+        ))}
+      </div>
+      {templateHint && (
+        <p style={{ fontSize: 12.5, margin: "0 0 14px", color: "color-mix(in srgb, var(--color-text) 60%, transparent)" }}>
+          {templateHint}
+        </p>
       )}
+
+      <LevelLadderEditor
+        levels={names}
+        onChange={(next) => {
+          setNames(next);
+          setTemplateHint(null);
+        }}
+      />
     </Modal>
   );
 }

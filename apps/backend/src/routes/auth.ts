@@ -12,6 +12,10 @@ const registerSchema = z.object({
   ownerName: z.string().min(1),
   email: z.string().email().transform((e) => e.toLowerCase()),
   type: z.enum(["SCHOOL", "COLLEGE", "COACHING", "TUTOR"]).default("COACHING"),
+  // The structure ladder chosen in the registration wizard — a template
+  // as-is, a customized one, or [] for "decide later." Optional so older
+  // or direct API callers still get a sensible default (see ORG_TEMPLATES).
+  levels: z.array(z.string().trim().min(1).max(60)).max(6).optional(),
 });
 
 const studentSignupSchema = z.object({
@@ -42,9 +46,11 @@ export default async function authRoutes(fastify: FastifyInstance) {
       return reply.code(409).send({ error: "An account with this email already exists" });
     }
 
-    // Seed the structure ladder that matches this kind of organization
-    // (a school gets Class > Section, a coaching center a single Batch).
-    // It's only a starting point — the admin can rename or re-shape it.
+    // The registration wizard always sends the ladder it wants (a template,
+    // a customized one, or [] for "decide later"); only a caller that omits
+    // levels entirely falls back to the type's default template.
+    const levelNames = body.levels ?? ORG_TEMPLATES[body.type] ?? [];
+
     await prisma.institute.create({
       data: {
         name: body.instituteName,
@@ -53,7 +59,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
           create: { name: body.ownerName, email: body.email, role: "OWNER" },
         },
         orgLevels: {
-          create: (ORG_TEMPLATES[body.type] ?? []).map((name, depth) => ({ name, depth })),
+          create: levelNames.map((name, depth) => ({ name, depth })),
         },
       },
     });
