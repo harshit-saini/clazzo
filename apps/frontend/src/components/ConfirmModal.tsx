@@ -9,6 +9,7 @@ export function ConfirmModal({
   body,
   confirmLabel = "Confirm",
   busy,
+  variant = "primary",
   onConfirm,
   onClose,
 }: {
@@ -16,6 +17,9 @@ export function ConfirmModal({
   body: ReactNode;
   confirmLabel?: string;
   busy?: boolean;
+  /** "danger" renders the confirm button in the danger color so a
+   * destructive action reads visibly differently from a routine one. */
+  variant?: "primary" | "danger";
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -23,8 +27,14 @@ export function ConfirmModal({
     <Modal
       title={title}
       onClose={onClose}
+      busy={busy}
       actions={
-        <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={busy}>
+        <button
+          type="button"
+          className={`btn ${variant === "danger" ? "btn-danger" : "btn-primary"}`}
+          onClick={onConfirm}
+          disabled={busy}
+        >
           {busy ? "Working…" : confirmLabel}
         </button>
       }

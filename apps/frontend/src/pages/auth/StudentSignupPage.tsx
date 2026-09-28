@@ -51,7 +51,7 @@ export function StudentSignupPage() {
             <FormField label="Email address">
               <TextInput type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </FormField>
-            {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+            {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
             <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
               {busy ? "Creating…" : "Create account"}
             </button>

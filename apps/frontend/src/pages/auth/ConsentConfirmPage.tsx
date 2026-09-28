@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../../lib/api";
 import { FormField, TextInput } from "../../components/FormField";
 
 export function ConsentConfirmPage() {
-  const [form, setForm] = useState({ email: "", code: "" });
+  const [searchParams] = useSearchParams();
+  const [form, setForm] = useState({ email: searchParams.get("email") ?? "", code: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmedCount, setConfirmedCount] = useState<number | null>(null);
@@ -58,7 +59,7 @@ export function ConsentConfirmPage() {
                 placeholder="123456"
               />
             </FormField>
-            {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+            {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
             <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
               {busy ? "Confirming…" : "Confirm"}
             </button>

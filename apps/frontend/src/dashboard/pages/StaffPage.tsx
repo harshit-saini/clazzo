@@ -7,6 +7,7 @@ import { DataTable } from "../../components/DataTable";
 import { Modal } from "../../components/Modal";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { FormField, Select, TextInput } from "../../components/FormField";
+import { useToast } from "../../components/ToastContext";
 
 type StaffRole = "OWNER" | "TEACHER" | "ACCOUNTANT";
 
@@ -24,6 +25,7 @@ const ROLE_LABEL: Record<StaffRole, string> = { OWNER: "Owner", TEACHER: "Teache
 export function StaffPage() {
   const { identity } = useAuth();
   const isOwner = identity?.kind === "STAFF" && identity.role === "OWNER";
+  const showToast = useToast();
 
   const { data: staff, loading, error, reload } = useApiData(() => api.get<Staff[]>("/api/staff"));
   const [showAdd, setShowAdd] = useState(false);
@@ -41,6 +43,7 @@ export function StaffPage() {
     try {
       await api.post("/api/staff", { ...form, email: form.email.trim().toLowerCase() });
       setShowAdd(false);
+      showToast(`${form.name} added as ${ROLE_LABEL[form.role]}.`);
       setForm({ name: "", email: "", role: "TEACHER" });
       reload();
     } catch (err) {
@@ -55,9 +58,11 @@ export function StaffPage() {
     setActionBusy(true);
     setActionError(null);
     try {
+      const name = deactivateTarget.name;
       await api.patch(`/api/staff/${deactivateTarget.id}/deactivate`);
       setDeactivateTarget(null);
       reload();
+      showToast(`${name} deactivated.`);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Could not deactivate.");
     } finally {
@@ -65,13 +70,16 @@ export function StaffPage() {
     }
   }
 
-  async function handleReactivate(id: string) {
+  async function handleReactivate(id: string, name: string) {
     setActionError(null);
     try {
       await api.patch(`/api/staff/${id}/activate`);
       reload();
+      showToast(`${name} reactivated.`);
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : "Could not reactivate.");
+      const message = err instanceof ApiError ? err.message : "Could not reactivate.";
+      setActionError(message);
+      showToast(message, "error");
     }
   }
 
@@ -86,7 +94,7 @@ export function StaffPage() {
         )}
       </div>
 
-      {actionError && <p style={{ color: "var(--color-accent-700)", fontSize: 13, marginBottom: 12 }}>{actionError}</p>}
+      {actionError && <p style={{ color: "var(--color-danger)", fontSize: 13, marginBottom: 12 }}>{actionError}</p>}
 
       <AsyncState loading={loading} error={error} data={staff} onRetry={reload}>
         {(staff) => (
@@ -107,13 +115,13 @@ export function StaffPage() {
                     <button
                       type="button"
                       className="btn btn-ghost"
-                      style={{ fontSize: 13, padding: 0 }}
+                      style={{ fontSize: 13 }}
                       onClick={() => setDeactivateTarget(s)}
                     >
                       Deactivate
                     </button>
                   ) : (
-                    <button type="button" className="btn btn-ghost" style={{ fontSize: 13, padding: 0 }} onClick={() => handleReactivate(s.id)}>
+                    <button type="button" className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => handleReactivate(s.id, s.name)}>
                       Reactivate
                     </button>
                   );
@@ -125,12 +133,12 @@ export function StaffPage() {
       </AsyncState>
 
       {showAdd && (
-        <Modal title="Add staff member" onClose={() => setShowAdd(false)}>
+        <Modal title="Add staff member" onClose={() => setShowAdd(false)} busy={busy}>
           <form onSubmit={handleAdd}>
-            <FormField label="Name">
+            <FormField label="Name" required>
               <TextInput required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </FormField>
-            <FormField label="Email">
+            <FormField label="Email" required>
               <TextInput type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </FormField>
             <FormField label="Role">
@@ -140,7 +148,7 @@ export function StaffPage() {
                 <option value="OWNER">Owner — full access</option>
               </Select>
             </FormField>
-            {addError && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{addError}</p>}
+            {addError && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{addError}</p>}
             <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
               {busy ? "Adding…" : "Add staff member"}
             </button>
@@ -152,6 +160,7 @@ export function StaffPage() {
         <ConfirmModal
           title={`Deactivate ${deactivateTarget.name}?`}
           confirmLabel="Deactivate"
+          variant="danger"
           busy={actionBusy}
           onClose={() => setDeactivateTarget(null)}
           onConfirm={handleDeactivateConfirmed}

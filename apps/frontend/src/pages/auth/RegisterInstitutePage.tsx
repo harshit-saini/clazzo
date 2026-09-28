@@ -70,7 +70,7 @@ export function RegisterInstitutePage() {
                 ))}
               </Select>
             </FormField>
-            <FormField label="Institute name">
+            <FormField label="Institute name" required>
               <TextInput
                 required
                 autoFocus
@@ -78,10 +78,10 @@ export function RegisterInstitutePage() {
                 onChange={(e) => setForm({ ...form, instituteName: e.target.value })}
               />
             </FormField>
-            <FormField label="Your name">
+            <FormField label="Your name" required>
               <TextInput required value={form.ownerName} onChange={(e) => setForm({ ...form, ownerName: e.target.value })} />
             </FormField>
-            <FormField label="Email address">
+            <FormField label="Email address" required>
               <TextInput type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </FormField>
 
@@ -124,7 +124,7 @@ export function RegisterInstitutePage() {
               )}
             </div>
 
-            {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+            {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
             <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
               {busy ? "Creating…" : "Create institute"}
             </button>

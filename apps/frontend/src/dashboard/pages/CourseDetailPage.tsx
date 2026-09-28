@@ -6,6 +6,7 @@ import { useApiData } from "../../lib/useApiData";
 import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 import { FormField, Select } from "../../components/FormField";
+import { useToast } from "../../components/ToastContext";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -29,8 +30,10 @@ export function CourseDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { identity } = useAuth();
   const isOwner = identity?.kind === "STAFF" && identity.role === "OWNER";
+  const showToast = useToast();
   const [selected, setSelected] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const { data, loading, error: loadError, reload } = useApiData<CoursePageData>(async () => {
     const course = await api.get<CourseDetail>(`/api/courses/${id}`);
@@ -50,17 +53,31 @@ export function CourseDetailPage() {
     e.preventDefault();
     if (!selected) return;
     setError(null);
+    setBusy(true);
     try {
       await api.post(`/api/courses/${id}/enroll`, { studentId: selected });
       setSelected("");
       reload();
+      showToast("Student added.");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not add student.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemove(studentId: string, name: string) {
+    try {
+      await api.delete(`/api/courses/${id}/enroll/${studentId}`);
+      reload();
+      showToast(`${name} removed.`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not remove student.", "error");
     }
   }
 
   return (
-    <AsyncState loading={loading} error={loadError} data={data} onRetry={reload}>
+    <AsyncState loading={loading} error={loadError} data={data} onRetry={reload} backTo="/dashboard/courses" backLabel="Back to subjects">
       {({ course, candidates }) => {
         const isElective = course.enrollmentMode === "SELECTED";
 
@@ -103,12 +120,12 @@ export function CourseDetailPage() {
                     ? [
                         {
                           header: "",
-                          render: (s: { id: string }) => (
+                          render: (s: { id: string; name: string }) => (
                             <button
                               type="button"
                               className="btn btn-ghost"
-                              style={{ fontSize: 13, padding: 0 }}
-                              onClick={() => api.delete(`/api/courses/${course.id}/enroll/${s.id}`).then(reload)}
+                              style={{ fontSize: 13 }}
+                              onClick={() => handleRemove(s.id, s.name)}
                             >
                               Remove
                             </button>
@@ -131,12 +148,12 @@ export function CourseDetailPage() {
                       ))}
                     </Select>
                   </FormField>
-                  <button type="submit" className="btn btn-primary" style={{ height: 36 }} disabled={!selected}>
-                    Add
+                  <button type="submit" className="btn btn-primary" style={{ height: 36 }} disabled={!selected || busy}>
+                    {busy ? "Adding…" : "Add"}
                   </button>
                 </form>
               )}
-              {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+              {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
             </section>
           </div>
         );

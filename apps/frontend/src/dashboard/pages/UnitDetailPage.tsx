@@ -6,6 +6,7 @@ import { useApiData } from "../../lib/useApiData";
 import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 import { FormField, Select, TextInput } from "../../components/FormField";
+import { useToast } from "../../components/ToastContext";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -87,7 +88,7 @@ export function UnitDetailPage() {
   }, [id]);
 
   return (
-    <AsyncState loading={loading} error={error} data={unit} onRetry={reload}>
+    <AsyncState loading={loading} error={error} data={unit} onRetry={reload} backTo="/dashboard/structure" backLabel="Back to structure">
       {(unit) => {
         const enrolledIds = new Set(unit.roster.map((s) => s.id));
         const notEnrolled = allStudents.filter((s) => !enrolledIds.has(s.id));
@@ -146,9 +147,11 @@ function CoursesSection({
   canManage: boolean;
   onChanged: () => void;
 }) {
+  const showToast = useToast();
   const [form, setForm] = useState({ name: "", teacherId: "", enrollmentMode: "ALL_IN_UNIT" });
   const [teachers, setTeachers] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api.get<{ id: string; name: string }[]>("/api/staff").then(setTeachers).catch(() => setTeachers([]));
@@ -157,17 +160,32 @@ function CoursesSection({
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setBusy(true);
     try {
+      const name = form.name.trim();
       await api.post("/api/courses", {
         orgUnitId: unitId,
-        name: form.name.trim(),
+        name,
         teacherId: form.teacherId || undefined,
         enrollmentMode: form.enrollmentMode,
       });
       setForm({ name: "", teacherId: "", enrollmentMode: "ALL_IN_UNIT" });
       onChanged();
+      showToast(`${name} added.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not add subject.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemove(courseId: string, name: string) {
+    try {
+      await api.delete(`/api/courses/${courseId}`);
+      onChanged();
+      showToast(`${name} removed.`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not remove subject.", "error");
     }
   }
 
@@ -201,8 +219,8 @@ function CoursesSection({
                 <button
                   type="button"
                   className="btn btn-ghost"
-                  style={{ fontSize: 13, padding: 0 }}
-                  onClick={() => api.delete(`/api/courses/${c.id}`).then(onChanged)}
+                  style={{ fontSize: 13 }}
+                  onClick={() => handleRemove(c.id, c.name)}
                 >
                   Remove
                 </button>
@@ -212,7 +230,7 @@ function CoursesSection({
       />
       {canManage && (
         <form onSubmit={handleAdd} style={{ display: "flex", gap: 10, alignItems: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
-          <FormField label={`Add a subject to ${unitName}`}>
+          <FormField label={`Add a subject to ${unitName}`} required>
             <TextInput placeholder="e.g. Physics" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </FormField>
           <FormField label="Teacher">
@@ -231,12 +249,12 @@ function CoursesSection({
               <option value="SELECTED">Selected students (elective)</option>
             </Select>
           </FormField>
-          <button type="submit" className="btn btn-primary" style={{ height: 36 }}>
-            Add
+          <button type="submit" className="btn btn-primary" style={{ height: 36 }} disabled={busy}>
+            {busy ? "Adding…" : "Add"}
           </button>
         </form>
       )}
-      {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+      {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
     </section>
   );
 }
@@ -254,14 +272,35 @@ function RosterSection({
   canManage: boolean;
   onChanged: () => void;
 }) {
+  const showToast = useToast();
   const [selected, setSelected] = useState("");
+  const [busy, setBusy] = useState(false);
 
   async function handleEnroll(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) return;
-    await api.post(`/api/structure/units/${unitId}/enroll`, { studentId: selected });
-    setSelected("");
-    onChanged();
+    setBusy(true);
+    try {
+      const student = notEnrolled.find((s) => s.id === selected);
+      await api.post(`/api/structure/units/${unitId}/enroll`, { studentId: selected });
+      setSelected("");
+      onChanged();
+      showToast(`${student?.name ?? "Student"} enrolled.`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not enroll student.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemove(studentId: string, name: string) {
+    try {
+      await api.delete(`/api/structure/units/${unitId}/enroll/${studentId}`);
+      onChanged();
+      showToast(`${name} removed.`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not remove student.", "error");
+    }
   }
 
   return (
@@ -281,8 +320,8 @@ function RosterSection({
                 <button
                   type="button"
                   className="btn btn-ghost"
-                  style={{ fontSize: 13, padding: 0 }}
-                  onClick={() => api.delete(`/api/structure/units/${unitId}/enroll/${s.id}`).then(onChanged)}
+                  style={{ fontSize: 13 }}
+                  onClick={() => handleRemove(s.id, s.name)}
                 >
                   Remove
                 </button>
@@ -302,8 +341,8 @@ function RosterSection({
               ))}
             </Select>
           </FormField>
-          <button type="submit" className="btn btn-primary" style={{ height: 36 }} disabled={!selected}>
-            Enroll
+          <button type="submit" className="btn btn-primary" style={{ height: 36 }} disabled={!selected || busy}>
+            {busy ? "Enrolling…" : "Enroll"}
           </button>
         </form>
       )}
@@ -322,12 +361,15 @@ function ScheduleSection({
   courses: CourseRow[];
   onChanged: () => void;
 }) {
+  const showToast = useToast();
   const [form, setForm] = useState({ dayOfWeek: "1", startTime: "16:00", endTime: "17:00", courseId: "" });
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setBusy(true);
     try {
       await api.post(`/api/units/${unitId}/schedule`, {
         dayOfWeek: Number(form.dayOfWeek),
@@ -336,8 +378,21 @@ function ScheduleSection({
         courseId: form.courseId || undefined,
       });
       onChanged();
+      showToast("Schedule slot added.");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not add schedule slot.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemove(slotId: string) {
+    try {
+      await api.delete(`/api/schedule/${slotId}`);
+      onChanged();
+      showToast("Schedule slot removed.");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not remove schedule slot.", "error");
     }
   }
 
@@ -358,8 +413,8 @@ function ScheduleSection({
               <button
                 type="button"
                 className="btn btn-ghost"
-                style={{ fontSize: 13, padding: 0 }}
-                onClick={() => api.delete(`/api/schedule/${s.id}`).then(onChanged)}
+                style={{ fontSize: 13 }}
+                onClick={() => handleRemove(s.id)}
               >
                 Remove
               </button>
@@ -393,25 +448,31 @@ function ScheduleSection({
             ))}
           </Select>
         </FormField>
-        <button type="submit" className="btn btn-primary" style={{ height: 36 }}>
-          Add
+        <button type="submit" className="btn btn-primary" style={{ height: 36 }} disabled={busy}>
+          {busy ? "Adding…" : "Add"}
         </button>
       </form>
-      {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+      {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
     </section>
   );
 }
 
 function SessionsSection({ unitId, sessions, onChanged }: { unitId: string; sessions: ClassSession[]; onChanged: () => void }) {
+  const showToast = useToast();
   const [range, setRange] = useState({ fromDate: "", toDate: "" });
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setError(null);
     try {
       await api.post(`/api/units/${unitId}/sessions/generate`, range);
       onChanged();
+      showToast("Sessions generated.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not generate sessions.");
     } finally {
       setBusy(false);
     }
@@ -422,17 +483,18 @@ function SessionsSection({ unitId, sessions, onChanged }: { unitId: string; sess
   return (
     <section style={{ marginBottom: 32 }}>
       <h2 style={{ fontSize: 18, marginBottom: 10 }}>Class sessions</h2>
-      <form onSubmit={handleGenerate} style={{ display: "flex", gap: 10, alignItems: "flex-end", marginBottom: 14 }}>
-        <FormField label="From">
+      <form onSubmit={handleGenerate} style={{ display: "flex", gap: 10, alignItems: "flex-end", marginBottom: 14, flexWrap: "wrap" }}>
+        <FormField label="From" required>
           <TextInput type="date" required value={range.fromDate} onChange={(e) => setRange({ ...range, fromDate: e.target.value })} />
         </FormField>
-        <FormField label="To">
+        <FormField label="To" required>
           <TextInput type="date" required value={range.toDate} onChange={(e) => setRange({ ...range, toDate: e.target.value })} />
         </FormField>
         <button type="submit" className="btn btn-secondary" style={{ height: 36 }} disabled={busy}>
           {busy ? "Generating…" : "Generate sessions"}
         </button>
       </form>
+      {error && <p style={{ color: "var(--color-danger)", fontSize: 13, marginTop: -6, marginBottom: 14 }}>{error}</p>}
       <DataTable
         rows={upcoming}
         rowKey={(s) => s.id}
@@ -444,7 +506,7 @@ function SessionsSection({ unitId, sessions, onChanged }: { unitId: string; sess
           {
             header: "",
             render: (s) => (
-              <Link to={`/dashboard/attendance/${s.id}`} className="btn btn-ghost" style={{ fontSize: 13, padding: 0 }}>
+              <Link to={`/dashboard/attendance/${s.id}`} className="btn btn-ghost" style={{ fontSize: 13 }}>
                 Mark attendance
               </Link>
             ),
@@ -456,18 +518,24 @@ function SessionsSection({ unitId, sessions, onChanged }: { unitId: string; sess
 }
 
 function FeeStructureSection({ unitId, structure, onChanged }: { unitId: string; structure: FeeStructure | null; onChanged: () => void }) {
+  const showToast = useToast();
   const [form, setForm] = useState({
     amount: structure?.amount ?? "",
     billingCycle: structure?.billingCycle ?? "MONTHLY",
   });
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setError(null);
     try {
       await api.put(`/api/units/${unitId}/fee-structure`, { amount: Number(form.amount), billingCycle: form.billingCycle });
       onChanged();
+      showToast("Fee structure saved.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save fee structure.");
     } finally {
       setBusy(false);
     }
@@ -476,8 +544,8 @@ function FeeStructureSection({ unitId, structure, onChanged }: { unitId: string;
   return (
     <section>
       <h2 style={{ fontSize: 18, marginBottom: 10 }}>Fee structure</h2>
-      <form onSubmit={handleSubmit} style={{ display: "flex", gap: 10, alignItems: "flex-end", maxWidth: 420 }}>
-        <FormField label="Amount (₹)">
+      <form onSubmit={handleSubmit} style={{ display: "flex", gap: 10, alignItems: "flex-end", maxWidth: 420, flexWrap: "wrap" }}>
+        <FormField label="Amount (₹)" required>
           <TextInput type="number" min="0" step="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
         </FormField>
         <FormField label="Billing cycle">
@@ -491,6 +559,7 @@ function FeeStructureSection({ unitId, structure, onChanged }: { unitId: string;
           {busy ? "Saving…" : "Save"}
         </button>
       </form>
+      {error && <p style={{ color: "var(--color-danger)", fontSize: 13, marginTop: 8 }}>{error}</p>}
     </section>
   );
 }

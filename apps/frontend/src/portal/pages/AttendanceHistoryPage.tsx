@@ -16,6 +16,7 @@ export function AttendanceHistoryPage() {
     () => api.get<AttendanceRow[]>(`/api/student/institutes/${instituteId}/attendance`),
     [instituteId]
   );
+  const backTo = `/portal/institutes/${instituteId}`;
 
   return (
     <div>
@@ -24,7 +25,7 @@ export function AttendanceHistoryPage() {
       </Link>
       <h1 style={{ fontSize: 26, margin: "10px 0 20px" }}>Attendance history</h1>
 
-      <AsyncState loading={loading} error={error} data={rows} onRetry={reload}>
+      <AsyncState loading={loading} error={error} data={rows} onRetry={reload} backTo={backTo} backLabel="Back">
         {(rows) => (
           <DataTable
             rows={rows}

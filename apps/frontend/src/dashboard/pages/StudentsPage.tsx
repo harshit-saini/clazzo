@@ -7,6 +7,7 @@ import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 import { Modal } from "../../components/Modal";
 import { FormField, TextInput } from "../../components/FormField";
+import { useToast } from "../../components/ToastContext";
 
 const PAGE_SIZE = 50;
 
@@ -93,7 +94,7 @@ export function StudentsPage() {
                   header: "",
                   render: (s) =>
                     isOwner && !s.studentAccountId ? (
-                      <button type="button" className="btn btn-ghost" style={{ fontSize: 13, padding: 0 }} onClick={() => setInviteTarget(s)}>
+                      <button type="button" className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => setInviteTarget(s)}>
                         Invite
                       </button>
                     ) : null,
@@ -131,6 +132,7 @@ export function StudentsPage() {
 }
 
 function AddStudentModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const showToast = useToast();
   const [form, setForm] = useState({ name: "", phone: "", guardianName: "", guardianPhone: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -143,6 +145,7 @@ function AddStudentModal({ onClose, onCreated }: { onClose: () => void; onCreate
       await api.post("/api/students", form);
       onCreated();
       onClose();
+      showToast(`${form.name} added.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not add student.");
     } finally {
@@ -151,9 +154,9 @@ function AddStudentModal({ onClose, onCreated }: { onClose: () => void; onCreate
   }
 
   return (
-    <Modal title="Add student" onClose={onClose}>
+    <Modal title="Add student" onClose={onClose} busy={busy}>
       <form onSubmit={handleSubmit}>
-        <FormField label="Name">
+        <FormField label="Name" required>
           <TextInput required autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </FormField>
         <FormField label="Phone (optional)">
@@ -165,7 +168,7 @@ function AddStudentModal({ onClose, onCreated }: { onClose: () => void; onCreate
         <FormField label="Guardian phone (optional)">
           <TextInput value={form.guardianPhone} onChange={(e) => setForm({ ...form, guardianPhone: e.target.value })} />
         </FormField>
-        {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+        {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
         <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
           {busy ? "Adding…" : "Add student"}
         </button>
@@ -175,6 +178,7 @@ function AddStudentModal({ onClose, onCreated }: { onClose: () => void; onCreate
 }
 
 function InviteStudentModal({ student, onClose, onInvited }: { student: Student; onClose: () => void; onInvited: () => void }) {
+  const showToast = useToast();
   const [email, setEmail] = useState("");
   const [guardianEmail, setGuardianEmail] = useState(student.guardianEmail ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -191,6 +195,7 @@ function InviteStudentModal({ student, onClose, onInvited }: { student: Student;
       });
       onInvited();
       onClose();
+      showToast(`Invite sent to ${email.trim()}.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not send invite.");
     } finally {
@@ -199,15 +204,15 @@ function InviteStudentModal({ student, onClose, onInvited }: { student: Student;
   }
 
   return (
-    <Modal title={`Invite ${student.name}`} onClose={onClose}>
+    <Modal title={`Invite ${student.name}`} onClose={onClose} busy={busy}>
       <form onSubmit={handleSubmit}>
-        <FormField label="Student's email">
+        <FormField label="Student's email" required>
           <TextInput type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
         </FormField>
         <FormField label="Guardian's email (optional — requires their confirmation before access activates)">
           <TextInput type="email" value={guardianEmail} onChange={(e) => setGuardianEmail(e.target.value)} />
         </FormField>
-        {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+        {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
         <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
           {busy ? "Sending…" : "Send invite"}
         </button>

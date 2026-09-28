@@ -9,6 +9,7 @@ import { Modal } from "../../components/Modal";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { LevelLadderEditor } from "../../components/LevelLadderEditor";
 import { ORG_TEMPLATES } from "../../lib/orgTemplates";
+import { useToast } from "../../components/ToastContext";
 import { ChevronRightIcon, PlusIcon } from "../../icons";
 
 const COLLAPSED_KEY = "clazzo_structure_collapsed";
@@ -56,6 +57,7 @@ function loadCollapsed(): Set<string> {
 export function StructurePage() {
   const { identity } = useAuth();
   const isOwner = identity?.kind === "STAFF" && identity.role === "OWNER";
+  const showToast = useToast();
 
   const { data, loading, error: loadError, reload } = useApiData<StructureData>(() =>
     Promise.all([api.get<OrgLevel[]>("/api/structure/levels"), api.get<OrgUnit[]>("/api/structure/units")]).then(
@@ -87,9 +89,11 @@ export function StructurePage() {
     if (!archiveTarget) return;
     setArchiving(true);
     try {
+      const name = archiveTarget.name;
       await api.delete(`/api/structure/units/${archiveTarget.id}`);
       setArchiveTarget(null);
       reload();
+      showToast(`${name} archived.`);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Could not archive.");
     } finally {
@@ -118,7 +122,7 @@ export function StructurePage() {
                     <button
                       type="button"
                       className="btn btn-ghost"
-                      style={{ fontSize: 13, padding: 0 }}
+                      style={{ fontSize: 13 }}
                       onClick={() => setEditingLevels(true)}
                     >
                       Edit levels
@@ -143,7 +147,7 @@ export function StructurePage() {
               group is taught to everything inside it.
             </p>
 
-            {actionError && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{actionError}</p>}
+            {actionError && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{actionError}</p>}
 
             {isOwner && (
               <button
@@ -208,6 +212,7 @@ export function StructurePage() {
               <ConfirmModal
                 title={`Archive "${archiveTarget.name}"?`}
                 confirmLabel="Archive"
+                variant="danger"
                 busy={archiving}
                 onClose={() => setArchiveTarget(null)}
                 onConfirm={handleArchiveConfirmed}
@@ -333,6 +338,7 @@ function AddUnitModal({
 }) {
   const depth = parent ? parent.depth + 1 : 0;
   const levelName = levels.find((l) => l.depth === depth)?.name ?? "Group";
+  const showToast = useToast();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -342,8 +348,10 @@ function AddUnitModal({
     setError(null);
     setBusy(true);
     try {
-      await api.post("/api/structure/units", { name: name.trim(), parentId: parent?.id });
+      const trimmed = name.trim();
+      await api.post("/api/structure/units", { name: trimmed, parentId: parent?.id });
       onCreated();
+      showToast(`${trimmed} added.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create.");
     } finally {
@@ -355,6 +363,7 @@ function AddUnitModal({
     <Modal
       title={parent ? `Add ${levelName} to ${parent.name}` : `Add ${levelName}`}
       onClose={onClose}
+      busy={busy}
       actions={
         <button type="submit" form="add-unit" className="btn btn-primary" disabled={busy}>
           {busy ? "Adding…" : "Add"}
@@ -362,10 +371,10 @@ function AddUnitModal({
       }
     >
       <form id="add-unit" onSubmit={handleSubmit}>
-        <FormField label={`${levelName} name`}>
+        <FormField label={`${levelName} name`} required>
           <TextInput autoFocus required value={name} onChange={(e) => setName(e.target.value)} />
         </FormField>
-        {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+        {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
       </form>
     </Modal>
   );
@@ -380,17 +389,23 @@ function EditLevelsModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const showToast = useToast();
   const [names, setNames] = useState<string[]>(levels.map((l) => l.name));
   const [templateHint, setTemplateHint] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
     setBusy(true);
+    setError(null);
     try {
       await api.put("/api/structure/levels", {
         levels: names.map((n) => n.trim()).filter(Boolean).map((name) => ({ name })),
       });
       onSaved();
+      showToast("Levels saved.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save levels.");
     } finally {
       setBusy(false);
     }
@@ -400,6 +415,7 @@ function EditLevelsModal({
     <Modal
       title="Structure levels"
       onClose={onClose}
+      busy={busy}
       actions={
         <button type="button" className="btn btn-primary" onClick={handleSave} disabled={busy}>
           {busy ? "Saving…" : "Save"}
@@ -409,6 +425,7 @@ function EditLevelsModal({
       <p style={{ fontSize: 13, marginTop: 0, color: "color-mix(in srgb, var(--color-text) 65%, transparent)" }}>
         Name each level from the outside in — insert, remove, or rename below, or start from a template.
       </p>
+      {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
         {ORG_TEMPLATES.map((t) => (

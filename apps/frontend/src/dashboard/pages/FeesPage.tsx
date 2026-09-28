@@ -5,6 +5,7 @@ import { useApiData } from "../../lib/useApiData";
 import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 import { Select } from "../../components/FormField";
+import { InvoiceStatusTag } from "../../components/StatusTag";
 
 interface Invoice {
   id: string;
@@ -46,7 +47,7 @@ export function FeesPage() {
               { header: "Amount", render: (i) => `₹${i.amount}` },
               { header: "Paid", render: (i) => `₹${i.payments.reduce((s, p) => s + Number(p.amount), 0)}` },
               { header: "Due", render: (i) => new Date(i.dueDate).toLocaleDateString() },
-              { header: "Status", render: (i) => i.status },
+              { header: "Status", render: (i) => <InvoiceStatusTag status={i.status} /> },
             ]}
           />
         )}

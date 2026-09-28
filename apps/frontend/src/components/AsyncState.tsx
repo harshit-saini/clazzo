@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 /**
  * Consistent loading/error/content rendering for a `useApiData` result —
@@ -11,21 +12,34 @@ export function AsyncState<T>({
   error,
   data,
   onRetry,
+  backTo,
+  backLabel = "Back",
   children,
 }: {
   loading: boolean;
   error: string | null;
   data: T | null;
   onRetry: () => void;
+  /** When the whole page failed to load, "Try again" alone is a dead end on
+   * a detail page — this gives a way back to the parent list too. */
+  backTo?: string;
+  backLabel?: string;
   children: (data: T) => ReactNode;
 }) {
   if (error) {
     return (
       <div className="card" style={{ padding: 20, gap: 10, alignItems: "flex-start" }}>
-        <p style={{ margin: 0, color: "var(--color-accent-700)", fontSize: 14 }}>{error}</p>
-        <button type="button" className="btn btn-secondary" onClick={onRetry}>
-          Try again
-        </button>
+        <p style={{ margin: 0, color: "var(--color-danger)", fontSize: 14 }}>{error}</p>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" className="btn btn-secondary" onClick={onRetry}>
+            Try again
+          </button>
+          {backTo && (
+            <Link to={backTo} className="btn btn-ghost">
+              {backLabel}
+            </Link>
+          )}
+        </div>
       </div>
     );
   }

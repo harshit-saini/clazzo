@@ -42,6 +42,21 @@
   --color-accent-2-800: #3d472b;
   --color-accent-2-900: #272e1b;
 
+  /* Danger/warning — for the first time the app has any semantic color
+     distinct from the brand accent, so overdue fees, low attendance and
+     destructive actions can actually look different from routine ones. */
+  --color-danger: #b3261e;
+  --color-danger-600: #96201a;
+  --color-danger-700: #7d1c15;
+  --color-danger-100: #fbe4e1;
+  --color-danger-800: #5c1912;
+
+  --color-warning: #a15c00;
+  --color-warning-600: #8a4e00;
+  --color-warning-700: #714000;
+  --color-warning-100: #fbead0;
+  --color-warning-800: #5c3300;
+
   --font-heading: "Caprasimo", system-ui, sans-serif;
   --font-heading-weight: 400;
   --font-body: "Figtree", system-ui, sans-serif;
@@ -93,7 +108,7 @@ h5 { font-size: 16px; }
 h6 { font-size: 13px; }
 h6 { letter-spacing: 0.08em; text-transform: uppercase; }
 p { margin: 0 0 var(--space-3); }
-a { color: var(--color-accent); text-underline-offset: 3px; }
+a { color: var(--color-accent-700); text-underline-offset: 3px; }
 img { display: block; max-width: 100%; }
 figure { margin: 0; }
 figcaption {
@@ -123,17 +138,24 @@ figcaption {
 }
 .btn svg { display: block; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn-primary { background: var(--color-accent); color: var(--color-bg); }
-.btn-primary:hover { background: var(--color-accent-600); }
-.btn-primary:active { background: var(--color-accent-700); }
+/* Text-on-accent needs a darker step than the brand accent itself to clear
+   WCAG AA contrast (var(--color-accent) on var(--color-bg) is ~3:1). */
+.btn-primary { background: var(--color-accent-700); color: var(--color-bg); }
+.btn-primary:hover { background: var(--color-accent-800); }
+.btn-primary:active { background: var(--color-accent-900); }
 .btn-secondary { border-color: var(--color-divider); }
 .btn-secondary:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
 .btn-secondary:active { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
-.btn-ghost { color: var(--color-accent); padding-inline: var(--space-1); }
+.btn-ghost {
+  color: var(--color-accent-700); padding: 9px 10px; min-height: 40px;
+}
 .btn-ghost:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
 .btn-ghost:active { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
-.btn-icon { width: 36px; height: 36px; padding: 0; }
+.btn-icon { width: 40px; height: 40px; padding: 0; }
 .btn-block { width: 100%; margin-top: var(--space-2); }
+.btn-danger { background: var(--color-danger); color: #fff; }
+.btn-danger:hover { background: var(--color-danger-600); }
+.btn-danger:active { background: var(--color-danger-700); }
 
 /* — forms — */
 .field > label {
@@ -205,6 +227,8 @@ textarea.input { min-height: 90px; resize: vertical; }
 .tag-accent-2 { background: var(--color-accent-2-100); color: var(--color-accent-2-800); }
 .tag-neutral { background: var(--color-neutral-100); color: var(--color-neutral-800); }
 .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
+.tag-danger { background: var(--color-danger-100); color: var(--color-danger-800); }
+.tag-warning { background: var(--color-warning-100); color: var(--color-warning-800); }
 
 /* — navigation — */
 .nav {
@@ -232,6 +256,26 @@ textarea.input { min-height: 90px; resize: vertical; }
 }
 .table tbody tr:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
 
+/* — toast — */
+.toast-stack {
+  position: fixed; bottom: 20px; right: 20px; z-index: 80;
+  display: flex; flex-direction: column; gap: 8px; max-width: min(360px, calc(100vw - 32px));
+}
+.toast {
+  padding: 12px 16px; border-radius: var(--radius-md); font-size: 13.5px;
+  color: #fff; box-shadow: var(--shadow-md);
+  animation: toast-in 0.18s ease-out;
+}
+.toast-success { background: var(--color-accent-2-800); }
+.toast-error { background: var(--color-danger); }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 640px) {
+  .toast-stack { left: 16px; right: 16px; bottom: 16px; max-width: none; }
+}
+
 /* — dialog — */
 .dialog-backdrop {
   position: fixed; inset: 0; display: grid; place-items: center;
@@ -256,8 +300,8 @@ textarea.input { min-height: 90px; resize: vertical; }
 .input { padding-inline: 14px; }
 
 /* — page-level link override (from the homepage's own <helmet>) — */
-a { color: var(--color-accent); text-decoration: none; }
-a:hover { color: var(--color-accent-600); }
+a { color: var(--color-accent-700); text-decoration: none; }
+a:hover { color: var(--color-accent-900); }
 
 /* ══════════════════════════════════════════════════════════════════════════
    Responsive — mobile layout for the marketing site, staff dashboard and
@@ -322,7 +366,24 @@ html, body { overflow-x: hidden; }
 
 /* A table wider than its container scrolls horizontally instead of
    squeezing columns unreadably narrow. */
-.table-scroll { overflow-x: auto; }
+.table-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-neutral-400) transparent;
+}
+.table-scroll::-webkit-scrollbar { height: 6px; }
+.table-scroll::-webkit-scrollbar-thumb { background: var(--color-neutral-400); border-radius: 999px; }
+.table-scroll::-webkit-scrollbar-track { background: transparent; }
+/* A scrollable table gives no visual sign that it scrolls, especially on
+   iOS where the scrollbar above is hidden until mid-scroll — so on narrow
+   viewports (where every dashboard table overflows) spell it out. */
+.table-scroll-hint {
+  display: none; font-size: 11.5px; margin-bottom: 6px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+@media (max-width: 640px) {
+  .table-scroll-hint { display: block; }
+}
 
 @media (max-width: 480px) {
   .card.elev-md, .card.elev-lg { padding: 24px !important; }
@@ -352,8 +413,8 @@ html, body { overflow-x: hidden; }
 
 .tree-toggle {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -428,8 +489,8 @@ html, body { overflow-x: hidden; }
 
 .ladder-index {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--color-accent-100);
   color: var(--color-accent-700);
@@ -455,8 +516,8 @@ html, body { overflow-x: hidden; }
 
 .ladder-remove {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: none;
   background: transparent;
