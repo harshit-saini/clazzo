@@ -7,6 +7,7 @@ import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 import { FormField, Select, TextInput } from "../../components/FormField";
 import { useToast } from "../../components/ToastContext";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -67,6 +68,7 @@ export function UnitDetailPage() {
   const canManageFees = identity?.kind === "STAFF" && (identity.role === "OWNER" || identity.role === "ACCOUNTANT");
 
   const { data: unit, loading, error, reload } = useApiData<UnitDetail>(() => api.get<UnitDetail>(`/api/structure/units/${id}`), [id]);
+  useDocumentTitle(unit?.name ?? "Structure");
   const [sessions, setSessions] = useState<ClassSession[]>([]);
   const [slots, setSlots] = useState<ScheduleSlot[]>([]);
   const [allStudents, setAllStudents] = useState<StudentOption[]>([]);
@@ -330,7 +332,7 @@ function RosterSection({
         ]}
       />
       {canManage && notEnrolled.length > 0 && (
-        <form onSubmit={handleEnroll} style={{ display: "flex", gap: 10, alignItems: "flex-end", marginTop: 14 }}>
+        <form onSubmit={handleEnroll} style={{ display: "flex", gap: 10, alignItems: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
           <FormField label="Add a student">
             <Select value={selected} onChange={(e) => setSelected(e.target.value)}>
               <option value="">Choose…</option>
@@ -368,6 +370,10 @@ function ScheduleSection({
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
+    if (form.endTime <= form.startTime) {
+      setError("End time must be after start time.");
+      return;
+    }
     setError(null);
     setBusy(true);
     try {
@@ -465,6 +471,10 @@ function SessionsSection({ unitId, sessions, onChanged }: { unitId: string; sess
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
+    if (range.toDate < range.fromDate) {
+      setError("End date must be on or after the start date.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {

@@ -69,6 +69,7 @@ export function LevelLadderEditor({ levels, onChange, maxLevels = 6 }: LevelLadd
               placeholder="Level name"
               onChange={(e) => rename(i, e.target.value)}
               aria-label={`Level ${i + 1} name`}
+              aria-invalid={name.trim() === ""}
             />
             <button
               type="button"
@@ -79,6 +80,7 @@ export function LevelLadderEditor({ levels, onChange, maxLevels = 6 }: LevelLadd
               <XIcon size={13} />
             </button>
           </div>
+          {name.trim() === "" && <p className="ladder-warning">Name required, or it'll be dropped when saved.</p>}
 
           {!atCap && (
             <InsertSlot

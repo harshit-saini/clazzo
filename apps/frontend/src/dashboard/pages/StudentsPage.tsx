@@ -8,6 +8,7 @@ import { DataTable } from "../../components/DataTable";
 import { Modal } from "../../components/Modal";
 import { FormField, TextInput } from "../../components/FormField";
 import { useToast } from "../../components/ToastContext";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 
 const PAGE_SIZE = 50;
 
@@ -29,6 +30,7 @@ interface StudentPage {
 }
 
 export function StudentsPage() {
+  useDocumentTitle("Students");
   const { identity } = useAuth();
   const isOwner = identity?.kind === "STAFF" && identity.role === "OWNER";
 
@@ -87,7 +89,7 @@ export function StudentsPage() {
               rowKey={(s) => s.id}
               emptyMessage="No students yet."
               columns={[
-                { header: "Name", render: (s) => <Link to={`/dashboard/students/${s.id}`}>{s.name}</Link> },
+                { header: "Name", primary: true, render: (s) => <Link to={`/dashboard/students/${s.id}`}>{s.name}</Link> },
                 { header: "Groups", render: (s) => s.enrollments.map((e) => e.orgUnit.name).join(", ") || "—" },
                 { header: "Portal access", render: (s) => accessLabel(s) },
                 {

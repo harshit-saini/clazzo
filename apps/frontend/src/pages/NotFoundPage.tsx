@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
+import { useDocumentTitle } from "../lib/useDocumentTitle";
 
 /** Any unmatched route (a typo, a stale bookmark, a deleted record's old
  * link) used to render nothing at all — no nav, no message, just a blank
  * page with no way back except editing the URL. */
 export function NotFoundPage() {
+  useDocumentTitle("Page not found");
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
       <div className="card elev-md" style={{ width: "min(420px, 100%)", padding: 36, gap: 14, textAlign: "center" }}>

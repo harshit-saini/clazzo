@@ -8,8 +8,10 @@ import { FormField, TextInput } from "../../components/FormField";
 import { Modal } from "../../components/Modal";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { LevelLadderEditor } from "../../components/LevelLadderEditor";
+import { EmptyState } from "../../components/EmptyState";
 import { ORG_TEMPLATES } from "../../lib/orgTemplates";
 import { useToast } from "../../components/ToastContext";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 import { ChevronRightIcon, PlusIcon } from "../../icons";
 
 const COLLAPSED_KEY = "clazzo_structure_collapsed";
@@ -55,6 +57,7 @@ function loadCollapsed(): Set<string> {
 }
 
 export function StructurePage() {
+  useDocumentTitle("Structure");
   const { identity } = useAuth();
   const isOwner = identity?.kind === "STAFF" && identity.role === "OWNER";
   const showToast = useToast();
@@ -161,12 +164,9 @@ export function StructurePage() {
             )}
 
             {roots.length === 0 ? (
-              <div
-                className="card"
-                style={{ padding: 28, alignItems: "center", textAlign: "center", color: "var(--color-neutral-600)" }}
-              >
-                Nothing set up yet{isOwner ? ` — add your first ${levels[0]?.name?.toLowerCase() ?? "group"} to get started.` : "."}
-              </div>
+              <EmptyState
+                title={`Nothing set up yet${isOwner ? ` — add your first ${levels[0]?.name?.toLowerCase() ?? "group"} above to get started.` : "."}`}
+              />
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {roots.map((root) => (

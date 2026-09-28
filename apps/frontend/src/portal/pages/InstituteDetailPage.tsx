@@ -3,6 +3,8 @@ import { api } from "../../lib/api";
 import { useApiData } from "../../lib/useApiData";
 import { AsyncState } from "../../components/AsyncState";
 import { AttendanceTag, InvoiceStatusTag } from "../../components/StatusTag";
+import { FeeSummaryStrip } from "../../components/FeeSummaryStrip";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -43,6 +45,7 @@ export function InstituteDetailPage() {
     () => api.get<InstituteDetail>(`/api/student/institutes/${instituteId}`),
     [instituteId]
   );
+  useDocumentTitle(detail?.institute.name ?? "Institute");
 
   return (
     <AsyncState loading={loading} error={error} data={detail} onRetry={reload} backTo="/portal" backLabel="Back to institutes">
@@ -93,6 +96,7 @@ export function InstituteDetailPage() {
               Full attendance history →
             </Link>
           </div>
+          <FeeSummaryStrip invoices={detail.invoices} />
           <div style={{ display: "grid", gap: 10 }}>
             {detail.invoices.length === 0 && <p>No invoices yet.</p>}
             {detail.invoices.map((inv) => {

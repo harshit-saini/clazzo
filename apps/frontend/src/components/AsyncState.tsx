@@ -45,10 +45,29 @@ export function AsyncState<T>({
   }
 
   if (loading && data === null) {
-    return <p style={{ color: "color-mix(in srgb, var(--color-text) 60%, transparent)" }}>Loading…</p>;
+    return (
+      <div style={{ display: "grid", gap: 10 }} aria-busy="true" aria-label="Loading">
+        <div className="skeleton-line" style={{ width: "35%", height: 20 }} />
+        <div className="skeleton-line" style={{ width: "100%" }} />
+        <div className="skeleton-line" style={{ width: "100%" }} />
+        <div className="skeleton-line" style={{ width: "75%" }} />
+      </div>
+    );
   }
 
   if (data === null) return null;
 
-  return <>{children(data)}</>;
+  return (
+    <>
+      {/* `loading` can go true again with `data` already populated — a
+       * search debounce, a filter change, a page flip — and used to render
+       * the old content with zero indication a new request was in flight. */}
+      {loading && (
+        <div className="tag tag-neutral" style={{ marginBottom: 12 }}>
+          Updating…
+        </div>
+      )}
+      {children(data)}
+    </>
+  );
 }

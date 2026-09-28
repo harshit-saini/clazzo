@@ -32,7 +32,11 @@ export function RegisterInstitutePage() {
       await api.post("/api/auth/register", {
         ...form,
         email: form.email.trim().toLowerCase(),
-        levels: structureMode === "later" ? [] : cleanLevels,
+        // Omit entirely (not []) for "decide later" — the backend only
+        // falls back to the type's default template when levels is
+        // undefined, so sending an explicit empty array used to leave the
+        // institute with zero levels instead of a sensible starting point.
+        ...(structureMode === "later" ? {} : { levels: cleanLevels }),
       });
       setDone(true);
     } catch (err) {
@@ -55,7 +59,7 @@ export function RegisterInstitutePage() {
             <p style={{ fontSize: 14 }}>
               Check <strong>{form.email}</strong> for a login code to get started.
             </p>
-            <button type="button" className="btn btn-primary btn-block" onClick={() => navigate("/login")}>
+            <button type="button" className="btn btn-primary btn-block" onClick={() => navigate("/login", { state: { email: form.email } })}>
               Go to login
             </button>
           </>
@@ -85,8 +89,8 @@ export function RegisterInstitutePage() {
               <TextInput type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </FormField>
 
-            <div style={{ margin: "4px 0 18px" }}>
-              <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 8 }}>Your structure</label>
+            <fieldset style={{ margin: "4px 0 18px", border: "none", padding: 0 }}>
+              <legend style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 8, padding: 0 }}>Your structure</legend>
               <div className="seg" style={{ marginBottom: 14 }}>
                 <label className="seg-opt">
                   <input
@@ -122,7 +126,7 @@ export function RegisterInstitutePage() {
                   by applying one of these templates.
                 </p>
               )}
-            </div>
+            </fieldset>
 
             {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
             <button type="submit" className="btn btn-primary btn-block" disabled={busy}>

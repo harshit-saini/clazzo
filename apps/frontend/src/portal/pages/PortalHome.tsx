@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useApiData } from "../../lib/useApiData";
 import { AsyncState } from "../../components/AsyncState";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 
 interface Membership {
   institute: { id: string; name: string; type: string };
@@ -11,6 +12,7 @@ interface Membership {
 }
 
 export function PortalHome() {
+  useDocumentTitle("My institutes");
   const { data: memberships, loading, error, reload } = useApiData(() => api.get<Membership[]>("/api/student/institutes"));
 
   return (

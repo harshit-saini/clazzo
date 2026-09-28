@@ -4,6 +4,7 @@ import { useApiData } from "../../lib/useApiData";
 import { AsyncState } from "../../components/AsyncState";
 import { StatCard } from "../../components/StatCard";
 import { DataTable } from "../../components/DataTable";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 
 interface Summary {
   activeStudentCount: number;
@@ -31,7 +32,18 @@ interface DashboardData {
   sessions: TodaySession[];
 }
 
+// Today's sessions are always for the current calendar day, so comparing
+// just the HH:mm end time against the current clock time is enough to know
+// whether a still-unmarked session's slot has already passed.
+function isOverdue(session: TodaySession) {
+  if (session.markedCount >= session.enrolledCount) return false;
+  const now = new Date();
+  const nowTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  return session.endTime < nowTime;
+}
+
 export function DashboardHome() {
+  useDocumentTitle("Dashboard");
   const { data, loading, error, reload } = useApiData<DashboardData>(() =>
     Promise.all([api.get<Summary>("/api/dashboard/summary"), api.get<TodaySession[]>("/api/dashboard/today")]).then(
       ([summary, sessions]) => ({ summary, sessions })
@@ -48,14 +60,19 @@ export function DashboardHome() {
             <SetupChecklist />
           ) : (
           <>
-            <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 32 }}>
+            <div className="grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 16, marginBottom: 32 }}>
+              <StatCard
+                label="Not yet marked"
+                value={summary.unmarkedSessionCount}
+                sentiment={summary.unmarkedSessionCount > 0 ? "bad" : "good"}
+              />
               <StatCard label="Active students" value={summary.activeStudentCount} />
               <StatCard label="Subjects" value={summary.activeCourseCount} accent="accent-2" />
               <StatCard label="Outstanding dues" value={`₹${summary.outstandingInvoiceTotal}`} />
               <StatCard label="Collected this month" value={`₹${summary.collectedThisMonthTotal}`} accent="accent-2" />
             </div>
 
-            <h2 style={{ fontSize: 18, marginBottom: 12 }}>Today's classes ({summary.unmarkedSessionCount} not yet marked)</h2>
+            <h2 style={{ fontSize: 18, marginBottom: 12 }}>Today's classes</h2>
             <DataTable
               rows={sessions}
               rowKey={(s) => s.id}
@@ -65,7 +82,23 @@ export function DashboardHome() {
                 { header: "Group", render: (s) => s.orgUnit.name },
                 { header: "Subject", render: (s) => s.course?.name ?? "Whole group" },
                 { header: "Teacher", render: (s) => s.course?.teacher?.name ?? "—" },
-                { header: "Attendance", render: (s) => `${s.markedCount} / ${s.enrolledCount} marked` },
+                {
+                  header: "Attendance",
+                  render: (s) => {
+                    const pct = s.enrolledCount > 0 ? Math.round((s.markedCount / s.enrolledCount) * 100) : 0;
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 120 }}>
+                        <div className="mini-progress">
+                          <div className="mini-progress-fill" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                          {s.markedCount}/{s.enrolledCount}
+                        </span>
+                        {isOverdue(s) && <span className="tag tag-danger">Overdue</span>}
+                      </div>
+                    );
+                  },
+                },
                 {
                   header: "",
                   render: (s) => (

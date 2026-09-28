@@ -98,7 +98,8 @@ export function AttendanceMarkPage() {
                 style={{ padding: "14px 18px", flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 10 }}
               >
                 <span style={{ fontSize: 14.5 }}>{row.studentName}</span>
-                <div className="seg" style={{ flexWrap: "wrap" }}>
+                <fieldset className="seg" style={{ flexWrap: "wrap", border: "none", padding: 0, margin: 0 }}>
+                  <legend className="sr-only">Attendance status for {row.studentName}</legend>
                   {STATUSES.map((s) => (
                     <label key={s} className="seg-opt">
                       <input
@@ -110,7 +111,7 @@ export function AttendanceMarkPage() {
                       {s}
                     </label>
                   ))}
-                </div>
+                </fieldset>
               </div>
             ))}
           </div>
