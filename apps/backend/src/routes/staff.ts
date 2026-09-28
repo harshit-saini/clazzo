@@ -8,7 +8,7 @@ import { logAudit } from "../lib/audit.js";
 const createStaffSchema = z.object({
   name: z.string().min(1),
   email: z.string().email().transform((e) => e.toLowerCase()),
-  role: z.enum(["OWNER", "TEACHER"]).default("TEACHER"),
+  role: z.enum(["OWNER", "TEACHER", "ACCOUNTANT"]).default("TEACHER"),
 });
 
 export default async function staffRoutes(fastify: FastifyInstance) {
@@ -61,6 +61,22 @@ export default async function staffRoutes(fastify: FastifyInstance) {
     const updated = await prisma.user.update({ where: { id }, data: { isActive: false } });
 
     await logAudit({ actor: me, instituteId: me.instituteId, action: "staff.deactivate", entityType: "User", entityId: id });
+
+    return { id: updated.id, isActive: updated.isActive };
+  });
+
+  // Deactivation now actually revokes access (see plugins/auth.ts re-checking
+  // isActive on every request), so it needs an undo — otherwise a misclick
+  // permanently locks a colleague out with no way back except direct DB access.
+  fastify.patch("/:id/activate", { preHandler: fastify.requireOwner }, async (request, reply) => {
+    const me = asStaff(request.user);
+    const { id } = request.params as { id: string };
+    const staff = await prisma.user.findFirst({ where: { id, instituteId: me.instituteId } });
+    if (!staff) return reply.code(404).send({ error: "Not found" });
+
+    const updated = await prisma.user.update({ where: { id }, data: { isActive: true } });
+
+    await logAudit({ actor: me, instituteId: me.instituteId, action: "staff.activate", entityType: "User", entityId: id });
 
     return { id: updated.id, isActive: updated.isActive };
   });

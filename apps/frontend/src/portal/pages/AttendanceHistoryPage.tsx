@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
+import { useApiData } from "../../lib/useApiData";
+import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 
 interface AttendanceRow {
@@ -11,13 +12,10 @@ interface AttendanceRow {
 
 export function AttendanceHistoryPage() {
   const { instituteId } = useParams<{ instituteId: string }>();
-  const [rows, setRows] = useState<AttendanceRow[] | null>(null);
-
-  useEffect(() => {
-    api.get<AttendanceRow[]>(`/api/student/institutes/${instituteId}/attendance`).then(setRows);
-  }, [instituteId]);
-
-  if (!rows) return null;
+  const { data: rows, loading, error, reload } = useApiData(
+    () => api.get<AttendanceRow[]>(`/api/student/institutes/${instituteId}/attendance`),
+    [instituteId]
+  );
 
   return (
     <div>
@@ -26,16 +24,20 @@ export function AttendanceHistoryPage() {
       </Link>
       <h1 style={{ fontSize: 26, margin: "10px 0 20px" }}>Attendance history</h1>
 
-      <DataTable
-        rows={rows}
-        rowKey={(r) => r.id}
-        emptyMessage="No attendance recorded yet."
-        columns={[
-          { header: "Date", render: (r) => new Date(r.classSession.date).toLocaleDateString() },
-          { header: "Subject", render: (r) => r.classSession.course?.name ?? r.classSession.orgUnit.name },
-          { header: "Status", render: (r) => r.status },
-        ]}
-      />
+      <AsyncState loading={loading} error={error} data={rows} onRetry={reload}>
+        {(rows) => (
+          <DataTable
+            rows={rows}
+            rowKey={(r) => r.id}
+            emptyMessage="No attendance recorded yet."
+            columns={[
+              { header: "Date", render: (r) => new Date(r.classSession.date).toLocaleDateString() },
+              { header: "Subject", render: (r) => r.classSession.course?.name ?? r.classSession.orgUnit.name },
+              { header: "Status", render: (r) => r.status },
+            ]}
+          />
+        )}
+      </AsyncState>
     </div>
   );
 }

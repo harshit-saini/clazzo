@@ -70,6 +70,24 @@ export async function rosterForCourse(course: Course & { orgUnit?: OrgUnit }) {
   return rosterForUnit(unit);
 }
 
+/// Courses a specific teacher is assigned to teach — used to scope a
+/// TEACHER-role staff member's visibility to their own sections rather than
+/// the whole institute's.
+export async function coursesTaughtBy(teacherId: string, instituteId: string) {
+  return prisma.course.findMany({ where: { teacherId, instituteId, isActive: true } });
+}
+
+/// Student ids visible to a teacher: the union of every course roster they
+/// teach. A TEACHER has no institute-wide student list — only students on
+/// the roster of at least one course they're assigned to.
+export async function studentIdsVisibleToTeacher(teacherId: string, instituteId: string): Promise<Set<string>> {
+  const courses = await coursesTaughtBy(teacherId, instituteId);
+  const rosters = await Promise.all(courses.map((c) => rosterForCourse(c)));
+  const ids = new Set<string>();
+  for (const roster of rosters) for (const s of roster) ids.add(s.id);
+  return ids;
+}
+
 /// Students attending a session. The session's own org unit decides who is
 /// in the room — *not* the course's, which may sit further up the tree: a
 /// Maths period for 12A must not pull in 12B just because Maths is

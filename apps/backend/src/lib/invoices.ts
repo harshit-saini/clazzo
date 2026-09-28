@@ -1,9 +1,15 @@
 import { Prisma, type FeePayment } from "@prisma/client";
 import { prisma } from "../db.js";
 
-/** Recomputes an invoice's status from the sum of its payments vs. its amount and due date. */
-export async function recalculateInvoiceStatus(invoiceId: string) {
-  const invoice = await prisma.feeInvoice.findUniqueOrThrow({
+type DbClient = typeof prisma | Prisma.TransactionClient;
+
+/**
+ * Recomputes an invoice's status from the sum of its payments vs. its amount
+ * and due date. Accepts a transaction client so callers that create a
+ * payment and recalculate status in the same request can do both atomically.
+ */
+export async function recalculateInvoiceStatus(invoiceId: string, db: DbClient = prisma) {
+  const invoice = await db.feeInvoice.findUniqueOrThrow({
     where: { id: invoiceId },
     include: { payments: true },
   });
@@ -25,7 +31,7 @@ export async function recalculateInvoiceStatus(invoiceId: string) {
   }
 
   if (status !== invoice.status) {
-    await prisma.feeInvoice.update({ where: { id: invoiceId }, data: { status } });
+    await db.feeInvoice.update({ where: { id: invoiceId }, data: { status } });
   }
 
   return status;

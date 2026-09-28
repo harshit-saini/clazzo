@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../lib/api";
+import { useApiData } from "../../lib/useApiData";
+import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 
 interface CourseRow {
@@ -14,13 +15,7 @@ interface CourseRow {
 }
 
 export function CoursesPage() {
-  const [courses, setCourses] = useState<CourseRow[] | null>(null);
-
-  useEffect(() => {
-    api.get<CourseRow[]>("/api/courses").then(setCourses);
-  }, []);
-
-  if (!courses) return null;
+  const { data: courses, loading, error, reload } = useApiData(() => api.get<CourseRow[]>("/api/courses"));
 
   return (
     <div>
@@ -29,26 +24,30 @@ export function CoursesPage() {
         Every subject taught across your organization. Add one from the group that studies it.
       </p>
 
-      <DataTable
-        rows={courses}
-        rowKey={(c) => c.id}
-        emptyMessage="No subjects yet — open a group under Structure and add one."
-        columns={[
-          { header: "Subject", render: (c) => <Link to={`/dashboard/courses/${c.id}`}>{c.name}</Link> },
-          {
-            header: "Group",
-            render: (c) => <Link to={`/dashboard/structure/${c.orgUnit.id}`}>{c.orgUnit.name}</Link>,
-          },
-          { header: "Teacher", render: (c) => c.teacher?.name ?? "—" },
-          {
-            header: "Taken by",
-            render: (c) =>
-              c.enrollmentMode === "SELECTED"
-                ? `${c._count.courseEnrollments} selected student${c._count.courseEnrollments === 1 ? "" : "s"}`
-                : "Everyone in the group",
-          },
-        ]}
-      />
+      <AsyncState loading={loading} error={error} data={courses} onRetry={reload}>
+        {(courses) => (
+          <DataTable
+            rows={courses}
+            rowKey={(c) => c.id}
+            emptyMessage="No subjects yet — open a group under Structure and add one."
+            columns={[
+              { header: "Subject", render: (c) => <Link to={`/dashboard/courses/${c.id}`}>{c.name}</Link> },
+              {
+                header: "Group",
+                render: (c) => <Link to={`/dashboard/structure/${c.orgUnit.id}`}>{c.orgUnit.name}</Link>,
+              },
+              { header: "Teacher", render: (c) => c.teacher?.name ?? "—" },
+              {
+                header: "Taken by",
+                render: (c) =>
+                  c.enrollmentMode === "SELECTED"
+                    ? `${c._count.courseEnrollments} selected student${c._count.courseEnrollments === 1 ? "" : "s"}`
+                    : "Everyone in the group",
+              },
+            ]}
+          />
+        )}
+      </AsyncState>
     </div>
   );
 }

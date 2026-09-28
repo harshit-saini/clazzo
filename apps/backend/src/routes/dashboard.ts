@@ -11,12 +11,20 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
 
   // Every ClassSession today across the institute, with whether attendance
   // has been fully marked yet — the teacher/owner "what's on today" view.
+  // A TEACHER only sees sessions for a course they teach — anything else
+  // would show a "Mark attendance" link that then 403s (see attendance.ts's
+  // per-session scoping), so this list has to agree with what they can act on.
   fastify.get("/today", async (request) => {
-    const { instituteId } = asStaff(request.user);
+    const staffMe = asStaff(request.user);
+    const { instituteId } = staffMe;
     const today = toDateOnly(new Date());
 
     const sessions = await prisma.classSession.findMany({
-      where: { date: today, orgUnit: { instituteId } },
+      where: {
+        date: today,
+        orgUnit: { instituteId },
+        ...(staffMe.role === "TEACHER" ? { course: { teacherId: staffMe.userId } } : {}),
+      },
       include: {
         orgUnit: { select: { id: true, name: true } },
         course: { select: { id: true, name: true, teacher: { select: { id: true, name: true } } } },
@@ -41,9 +49,14 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
     }));
   });
 
-  // Top-line numbers for the dashboard home screen.
+  // Top-line numbers for the dashboard home screen. The institute-wide
+  // totals (students, revenue, ...) stay aggregate for every role — they're
+  // summary counts, not itemized PII/fee data — but the "unmarked today"
+  // count is scoped the same way /today's session list is, so the heading
+  // above that list ("N not yet marked") always matches what's actually shown.
   fastify.get("/summary", async (request) => {
-    const { instituteId } = asStaff(request.user);
+    const staffMe = asStaff(request.user);
+    const { instituteId } = staffMe;
     const today = toDateOnly(new Date());
     const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
 
@@ -53,7 +66,11 @@ export default async function dashboardRoutes(fastify: FastifyInstance) {
         prisma.orgUnit.count({ where: { instituteId, isActive: true } }),
         prisma.course.count({ where: { instituteId, isActive: true } }),
         prisma.classSession.findMany({
-          where: { date: today, orgUnit: { instituteId } },
+          where: {
+            date: today,
+            orgUnit: { instituteId },
+            ...(staffMe.role === "TEACHER" ? { course: { teacherId: staffMe.userId } } : {}),
+          },
           include: { attendance: { select: { studentId: true } } },
         }),
         prisma.feeInvoice.findMany({

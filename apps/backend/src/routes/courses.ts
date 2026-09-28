@@ -26,12 +26,17 @@ export default async function courseRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.authenticate);
   fastify.addHook("preHandler", fastify.requireStaff);
 
+  // A TEACHER only sees the subjects they teach — the ?teacherId filter is
+  // ignored (overridden) for them, so they can't query another teacher's
+  // courses by guessing an id.
   fastify.get("/", async (request) => {
-    const { instituteId } = asStaff(request.user);
+    const staffMe = asStaff(request.user);
+    const { instituteId } = staffMe;
     const { teacherId } = request.query as { teacherId?: string };
+    const scopedTeacherId = staffMe.role === "TEACHER" ? staffMe.userId : teacherId;
 
     return prisma.course.findMany({
-      where: { instituteId, isActive: true, ...(teacherId ? { teacherId } : {}) },
+      where: { instituteId, isActive: true, ...(scopedTeacherId ? { teacherId: scopedTeacherId } : {}) },
       include: {
         teacher: { select: { id: true, name: true } },
         orgUnit: { select: { id: true, name: true, depth: true } },
@@ -43,7 +48,8 @@ export default async function courseRoutes(fastify: FastifyInstance) {
 
   fastify.get("/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { instituteId } = asStaff(request.user);
+    const staffMe = asStaff(request.user);
+    const { instituteId } = staffMe;
 
     const course = await prisma.course.findFirst({
       where: { id, instituteId },
@@ -54,11 +60,14 @@ export default async function courseRoutes(fastify: FastifyInstance) {
       },
     });
     if (!course) return reply.code(404).send({ error: "Not found" });
+    if (staffMe.role === "TEACHER" && course.teacherId !== staffMe.userId) {
+      return reply.code(404).send({ error: "Not found" });
+    }
 
     return { ...course, roster: await rosterForCourse(course) };
   });
 
-  fastify.post("/", async (request, reply) => {
+  fastify.post("/", { preHandler: fastify.requireOwner }, async (request, reply) => {
     const { instituteId } = asStaff(request.user);
     const body = createCourseSchema.parse(request.body);
 
@@ -85,7 +94,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
     return reply.code(201).send(course);
   });
 
-  fastify.patch("/:id", async (request, reply) => {
+  fastify.patch("/:id", { preHandler: fastify.requireOwner }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const { instituteId } = asStaff(request.user);
     const body = updateCourseSchema.parse(request.body);
@@ -103,7 +112,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
     });
   });
 
-  fastify.delete("/:id", async (request, reply) => {
+  fastify.delete("/:id", { preHandler: fastify.requireOwner }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const { instituteId } = asStaff(request.user);
 
@@ -116,7 +125,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
 
   // ─── Elective opt-ins (SELECTED courses only) ─────────────────────────
 
-  fastify.post("/:id/enroll", async (request, reply) => {
+  fastify.post("/:id/enroll", { preHandler: fastify.requireOwner }, async (request, reply) => {
     const { id: courseId } = request.params as { id: string };
     const { instituteId } = asStaff(request.user);
     const { studentId } = enrollSchema.parse(request.body);
@@ -140,7 +149,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
     return reply.code(201).send(enrollment);
   });
 
-  fastify.delete("/:id/enroll/:studentId", async (request, reply) => {
+  fastify.delete("/:id/enroll/:studentId", { preHandler: fastify.requireOwner }, async (request, reply) => {
     const { id: courseId, studentId } = request.params as { id: string; studentId: string };
     const { instituteId } = asStaff(request.user);
 

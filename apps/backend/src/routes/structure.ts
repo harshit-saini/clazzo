@@ -33,7 +33,7 @@ export default async function structureRoutes(fastify: FastifyInstance) {
   // Replaces the whole ladder in one call — the UI edits it as a list.
   // Units sitting at a depth that no longer exists keep their place in the
   // tree and simply lose their level label (FK is ON DELETE SET NULL).
-  fastify.put("/levels", async (request) => {
+  fastify.put("/levels", { preHandler: fastify.requireOwner }, async (request) => {
     const { instituteId } = asStaff(request.user);
     const { levels } = levelsSchema.parse(request.body);
 
@@ -97,7 +97,8 @@ export default async function structureRoutes(fastify: FastifyInstance) {
 
   fastify.get("/units/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { instituteId } = asStaff(request.user);
+    const staffMe = asStaff(request.user);
+    const { instituteId } = staffMe;
 
     const unit = await prisma.orgUnit.findFirst({
       where: { id, instituteId },
@@ -119,8 +120,17 @@ export default async function structureRoutes(fastify: FastifyInstance) {
       }),
     ]);
 
+    // A TEACHER can only open a group where they actually teach something —
+    // this endpoint's roster+fee-structure are exactly the data a teacher
+    // shouldn't get institute-wide.
+    if (staffMe.role === "TEACHER" && !courses.some((c) => c.teacherId === staffMe.userId)) {
+      return reply.code(404).send({ error: "Not found" });
+    }
+    const canSeeFees = staffMe.role === "OWNER" || staffMe.role === "ACCOUNTANT";
+
     return {
       ...unit,
+      feeStructure: canSeeFees ? unit.feeStructure : null,
       ancestors,
       children,
       // Courses attached higher up the tree apply here too; flag which are
@@ -130,7 +140,7 @@ export default async function structureRoutes(fastify: FastifyInstance) {
     };
   });
 
-  fastify.post("/units", async (request, reply) => {
+  fastify.post("/units", { preHandler: fastify.requireOwner }, async (request, reply) => {
     const { instituteId } = asStaff(request.user);
     const body = createUnitSchema.parse(request.body);
 
@@ -181,7 +191,7 @@ export default async function structureRoutes(fastify: FastifyInstance) {
     return reply.code(201).send(withPath);
   });
 
-  fastify.patch("/units/:id", async (request, reply) => {
+  fastify.patch("/units/:id", { preHandler: fastify.requireOwner }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const { instituteId } = asStaff(request.user);
     const body = renameUnitSchema.parse(request.body);
@@ -199,7 +209,7 @@ export default async function structureRoutes(fastify: FastifyInstance) {
 
   // Archives rather than deletes, and takes the whole subtree with it —
   // removing "Class 12" must not leave 12A orphaned and still listed.
-  fastify.delete("/units/:id", async (request, reply) => {
+  fastify.delete("/units/:id", { preHandler: fastify.requireOwner }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const { instituteId } = asStaff(request.user);
 
@@ -225,7 +235,7 @@ export default async function structureRoutes(fastify: FastifyInstance) {
 
   // ─── Enrollment ───────────────────────────────────────────────────────
 
-  fastify.post("/units/:id/enroll", async (request, reply) => {
+  fastify.post("/units/:id/enroll", { preHandler: fastify.requireOwner }, async (request, reply) => {
     const { id: orgUnitId } = request.params as { id: string };
     const { instituteId } = asStaff(request.user);
     const { studentId } = enrollSchema.parse(request.body);
@@ -254,7 +264,7 @@ export default async function structureRoutes(fastify: FastifyInstance) {
     return reply.code(201).send(enrollment);
   });
 
-  fastify.delete("/units/:id/enroll/:studentId", async (request, reply) => {
+  fastify.delete("/units/:id/enroll/:studentId", { preHandler: fastify.requireOwner }, async (request, reply) => {
     const { id: orgUnitId, studentId } = request.params as { id: string; studentId: string };
     const { instituteId } = asStaff(request.user);
 

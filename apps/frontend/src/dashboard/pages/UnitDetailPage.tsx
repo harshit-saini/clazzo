@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useAuth } from "../../auth/AuthContext";
 import { api, ApiError } from "../../lib/api";
+import { useApiData } from "../../lib/useApiData";
+import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 import { FormField, Select, TextInput } from "../../components/FormField";
 
@@ -58,66 +61,75 @@ interface StudentOption {
 
 export function UnitDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [unit, setUnit] = useState<UnitDetail | null>(null);
+  const { identity } = useAuth();
+  const isOwner = identity?.kind === "STAFF" && identity.role === "OWNER";
+  const canManageFees = identity?.kind === "STAFF" && (identity.role === "OWNER" || identity.role === "ACCOUNTANT");
+
+  const { data: unit, loading, error, reload } = useApiData<UnitDetail>(() => api.get<UnitDetail>(`/api/structure/units/${id}`), [id]);
   const [sessions, setSessions] = useState<ClassSession[]>([]);
   const [slots, setSlots] = useState<ScheduleSlot[]>([]);
   const [allStudents, setAllStudents] = useState<StudentOption[]>([]);
 
   function loadSessions() {
-    api.get<ClassSession[]>(`/api/units/${id}/sessions`).then(setSessions);
-  }
-
-  function load() {
-    api.get<UnitDetail>(`/api/structure/units/${id}`).then(setUnit);
-    api.get<ScheduleSlot[]>(`/api/units/${id}/schedule`).then(setSlots);
-    loadSessions();
+    api.get<ClassSession[]>(`/api/units/${id}/sessions`).then(setSessions).catch(() => setSessions([]));
   }
 
   useEffect(() => {
-    load();
-    api.get<StudentOption[]>("/api/students").then(setAllStudents);
+    api.get<ScheduleSlot[]>(`/api/units/${id}/schedule`).then(setSlots).catch(() => setSlots([]));
+    loadSessions();
+    if (isOwner) {
+      api
+        .get<{ items: StudentOption[] }>("/api/students?take=500")
+        .then((res) => setAllStudents(res.items))
+        .catch(() => setAllStudents([]));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  if (!unit) return null;
-
-  const enrolledIds = new Set(unit.roster.map((s) => s.id));
-  const notEnrolled = allStudents.filter((s) => !enrolledIds.has(s.id));
-
   return (
-    <div>
-      <p style={{ fontSize: 13, color: "color-mix(in srgb, var(--color-text) 60%, transparent)", marginBottom: 2 }}>
-        <Link to="/dashboard/structure">Structure</Link>
-        {unit.ancestors.map((a) => (
-          <span key={a.id}>
-            {" › "}
-            <Link to={`/dashboard/structure/${a.id}`}>{a.name}</Link>
-          </span>
-        ))}
-      </p>
-      <h1 style={{ fontSize: 26, marginBottom: 4 }}>{unit.name}</h1>
-      <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 28 }}>
-        {unit.level?.name ?? "Group"} · {unit.roster.length} student{unit.roster.length === 1 ? "" : "s"}
-      </p>
+    <AsyncState loading={loading} error={error} data={unit} onRetry={reload}>
+      {(unit) => {
+        const enrolledIds = new Set(unit.roster.map((s) => s.id));
+        const notEnrolled = allStudents.filter((s) => !enrolledIds.has(s.id));
 
-      {unit.children.length > 0 && (
-        <section style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 18, marginBottom: 10 }}>Inside this group</h2>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {unit.children.map((child) => (
-              <Link key={child.id} to={`/dashboard/structure/${child.id}`} className="btn btn-secondary">
-                {child.name}
-              </Link>
-            ))}
+        return (
+          <div>
+            <p style={{ fontSize: 13, color: "color-mix(in srgb, var(--color-text) 60%, transparent)", marginBottom: 2 }}>
+              <Link to="/dashboard/structure">Structure</Link>
+              {unit.ancestors.map((a) => (
+                <span key={a.id}>
+                  {" › "}
+                  <Link to={`/dashboard/structure/${a.id}`}>{a.name}</Link>
+                </span>
+              ))}
+            </p>
+            <h1 style={{ fontSize: 26, marginBottom: 4 }}>{unit.name}</h1>
+            <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 28 }}>
+              {unit.level?.name ?? "Group"} · {unit.roster.length} student{unit.roster.length === 1 ? "" : "s"}
+            </p>
+
+            {unit.children.length > 0 && (
+              <section style={{ marginBottom: 32 }}>
+                <h2 style={{ fontSize: 18, marginBottom: 10 }}>Inside this group</h2>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {unit.children.map((child) => (
+                    <Link key={child.id} to={`/dashboard/structure/${child.id}`} className="btn btn-secondary">
+                      {child.name}
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <CoursesSection unitId={unit.id} unitName={unit.name} courses={unit.courses} canManage={isOwner} onChanged={reload} />
+            <RosterSection unitId={unit.id} roster={unit.roster} notEnrolled={notEnrolled} canManage={isOwner} onChanged={reload} />
+            <ScheduleSection unitId={unit.id} slots={slots} courses={unit.courses} onChanged={reload} />
+            <SessionsSection unitId={unit.id} sessions={sessions} onChanged={loadSessions} />
+            {canManageFees && <FeeStructureSection unitId={unit.id} structure={unit.feeStructure} onChanged={reload} />}
           </div>
-        </section>
-      )}
-
-      <CoursesSection unitId={unit.id} unitName={unit.name} courses={unit.courses} onChanged={load} />
-      <RosterSection unitId={unit.id} roster={unit.roster} notEnrolled={notEnrolled} onChanged={load} />
-      <ScheduleSection unitId={unit.id} slots={slots} courses={unit.courses} onChanged={load} />
-      <SessionsSection unitId={unit.id} sessions={sessions} onChanged={loadSessions} />
-      <FeeStructureSection unitId={unit.id} structure={unit.feeStructure} onChanged={load} />
-    </div>
+        );
+      }}
+    </AsyncState>
   );
 }
 
@@ -125,11 +137,13 @@ function CoursesSection({
   unitId,
   unitName,
   courses,
+  canManage,
   onChanged,
 }: {
   unitId: string;
   unitName: string;
   courses: CourseRow[];
+  canManage: boolean;
   onChanged: () => void;
 }) {
   const [form, setForm] = useState({ name: "", teacherId: "", enrollmentMode: "ALL_IN_UNIT" });
@@ -183,7 +197,7 @@ function CoursesSection({
           {
             header: "",
             render: (c) =>
-              c.inherited ? null : (
+              canManage && !c.inherited ? (
                 <button
                   type="button"
                   className="btn btn-ghost"
@@ -192,34 +206,36 @@ function CoursesSection({
                 >
                   Remove
                 </button>
-              ),
+              ) : null,
           },
         ]}
       />
-      <form onSubmit={handleAdd} style={{ display: "flex", gap: 10, alignItems: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
-        <FormField label={`Add a subject to ${unitName}`}>
-          <TextInput placeholder="e.g. Physics" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        </FormField>
-        <FormField label="Teacher">
-          <Select value={form.teacherId} onChange={(e) => setForm({ ...form, teacherId: e.target.value })}>
-            <option value="">Unassigned</option>
-            {teachers.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
-        </FormField>
-        <FormField label="Taken by">
-          <Select value={form.enrollmentMode} onChange={(e) => setForm({ ...form, enrollmentMode: e.target.value })}>
-            <option value="ALL_IN_UNIT">Everyone in this group</option>
-            <option value="SELECTED">Selected students (elective)</option>
-          </Select>
-        </FormField>
-        <button type="submit" className="btn btn-primary" style={{ height: 36 }}>
-          Add
-        </button>
-      </form>
+      {canManage && (
+        <form onSubmit={handleAdd} style={{ display: "flex", gap: 10, alignItems: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
+          <FormField label={`Add a subject to ${unitName}`}>
+            <TextInput placeholder="e.g. Physics" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </FormField>
+          <FormField label="Teacher">
+            <Select value={form.teacherId} onChange={(e) => setForm({ ...form, teacherId: e.target.value })}>
+              <option value="">Unassigned</option>
+              {teachers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField label="Taken by">
+            <Select value={form.enrollmentMode} onChange={(e) => setForm({ ...form, enrollmentMode: e.target.value })}>
+              <option value="ALL_IN_UNIT">Everyone in this group</option>
+              <option value="SELECTED">Selected students (elective)</option>
+            </Select>
+          </FormField>
+          <button type="submit" className="btn btn-primary" style={{ height: 36 }}>
+            Add
+          </button>
+        </form>
+      )}
       {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
     </section>
   );
@@ -229,11 +245,13 @@ function RosterSection({
   unitId,
   roster,
   notEnrolled,
+  canManage,
   onChanged,
 }: {
   unitId: string;
   roster: { id: string; name: string; phone: string | null }[];
   notEnrolled: StudentOption[];
+  canManage: boolean;
   onChanged: () => void;
 }) {
   const [selected, setSelected] = useState("");
@@ -258,20 +276,21 @@ function RosterSection({
           { header: "Phone", render: (s) => s.phone ?? "—" },
           {
             header: "",
-            render: (s) => (
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ fontSize: 13, padding: 0 }}
-                onClick={() => api.delete(`/api/structure/units/${unitId}/enroll/${s.id}`).then(onChanged)}
-              >
-                Remove
-              </button>
-            ),
+            render: (s) =>
+              canManage ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ fontSize: 13, padding: 0 }}
+                  onClick={() => api.delete(`/api/structure/units/${unitId}/enroll/${s.id}`).then(onChanged)}
+                >
+                  Remove
+                </button>
+              ) : null,
           },
         ]}
       />
-      {notEnrolled.length > 0 && (
+      {canManage && notEnrolled.length > 0 && (
         <form onSubmit={handleEnroll} style={{ display: "flex", gap: 10, alignItems: "flex-end", marginTop: 14 }}>
           <FormField label="Add a student">
             <Select value={selected} onChange={(e) => setSelected(e.target.value)}>

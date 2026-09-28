@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { asStaff } from "../auth/identity.js";
 import { logAudit } from "../lib/audit.js";
-import { rosterForSession } from "../lib/orgStructure.js";
+import { rosterForSession, studentIdsVisibleToTeacher } from "../lib/orgStructure.js";
 
 const markAttendanceSchema = z.object({
   records: z
@@ -16,6 +16,20 @@ const markAttendanceSchema = z.object({
     .min(1),
 });
 
+/// A TEACHER may only touch a session tied to a course they teach.
+/// Course-less (homeroom/daily-attendance) sessions have no per-teacher
+/// owner in the schema — until a unit-level teacher assignment exists,
+/// only OWNER can mark/view those rather than opening them to every
+/// teacher institute-wide.
+function staffCanAccessSession(
+  staff: { role: string; userId: string },
+  session: { course: { teacherId: string | null } | null }
+): boolean {
+  if (staff.role === "OWNER") return true;
+  if (staff.role !== "TEACHER") return false;
+  return session.course?.teacherId === staff.userId;
+}
+
 export default async function attendanceRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.authenticate);
   fastify.addHook("preHandler", fastify.requireStaff);
@@ -26,17 +40,21 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
   // everyone in the group (daily/homeroom attendance).
   fastify.get("/sessions/:sessionId/attendance", async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
+    const staff = asStaff(request.user);
 
     const session = await prisma.classSession.findUnique({
       where: { id: sessionId },
       include: {
         orgUnit: true,
-        course: { select: { id: true, name: true } },
+        course: { select: { id: true, name: true, teacherId: true } },
         attendance: true,
       },
     });
-    if (!session || session.orgUnit.instituteId !== asStaff(request.user).instituteId) {
+    if (!session || session.orgUnit.instituteId !== staff.instituteId) {
       return reply.code(404).send({ error: "Not found" });
+    }
+    if (!staffCanAccessSession(staff, session)) {
+      return reply.code(403).send({ error: "You don't teach this class" });
     }
 
     const roster = await rosterForSession(session);
@@ -57,10 +75,13 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     const staff = asStaff(request.user);
     const session = await prisma.classSession.findUnique({
       where: { id: sessionId },
-      include: { orgUnit: true },
+      include: { orgUnit: true, course: { select: { teacherId: true } } },
     });
     if (!session || session.orgUnit.instituteId !== staff.instituteId) {
       return reply.code(404).send({ error: "Not found" });
+    }
+    if (!staffCanAccessSession(staff, session)) {
+      return reply.code(403).send({ error: "You don't teach this class" });
     }
 
     const roster = await rosterForSession(session);
@@ -96,26 +117,46 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     return reply.send({ marked: records.length });
   });
 
-  // A student's attendance history across every group and subject.
+  // A student's attendance history across every group and subject. A
+  // TEACHER only gets this for a student on the roster of a course they
+  // teach. Paginated (default 50, max 500) so a student's history can't
+  // grow into an unbounded response over multiple terms.
   fastify.get("/students/:studentId/attendance", async (request, reply) => {
     const { studentId } = request.params as { studentId: string };
+    const staff = asStaff(request.user);
+    const { take: takeRaw, skip: skipRaw } = request.query as { take?: string; skip?: string };
+    const take = Math.min(Math.max(Number.parseInt(takeRaw ?? "", 10) || 50, 1), 500);
+    const skip = Math.max(Number.parseInt(skipRaw ?? "", 10) || 0, 0);
 
     const student = await prisma.student.findFirst({
-      where: { id: studentId, instituteId: asStaff(request.user).instituteId },
+      where: { id: studentId, instituteId: staff.instituteId },
     });
     if (!student) return reply.code(404).send({ error: "Not found" });
 
-    return prisma.attendance.findMany({
-      where: { studentId },
-      include: {
-        classSession: {
-          include: {
-            orgUnit: { select: { id: true, name: true } },
-            course: { select: { id: true, name: true } },
+    if (staff.role === "TEACHER") {
+      const visibleIds = await studentIdsVisibleToTeacher(staff.userId, staff.instituteId);
+      if (!visibleIds.has(studentId)) return reply.code(404).send({ error: "Not found" });
+    }
+
+    const where = { studentId };
+    const [items, total] = await Promise.all([
+      prisma.attendance.findMany({
+        where,
+        include: {
+          classSession: {
+            include: {
+              orgUnit: { select: { id: true, name: true } },
+              course: { select: { id: true, name: true } },
+            },
           },
         },
-      },
-      orderBy: { classSession: { date: "desc" } },
-    });
+        orderBy: { classSession: { date: "desc" } },
+        take,
+        skip,
+      }),
+      prisma.attendance.count({ where }),
+    ]);
+
+    return { items, total };
   });
 }

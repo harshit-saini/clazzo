@@ -28,7 +28,10 @@ const recordPaymentSchema = z.object({
 
 export default async function feeRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.authenticate);
-  fastify.addHook("preHandler", fastify.requireStaff);
+  // Fee data is family financial information — narrower than "any staff
+  // member," unlike the rest of the dashboard. A TEACHER has no reason to
+  // see another section's (or their own students') outstanding dues.
+  fastify.addHook("preHandler", fastify.requireOwnerOrAccountant);
 
   // ── Fee structure (per org unit) ───────────────────────────────────
   fastify.put("/units/:unitId/fee-structure", async (request, reply) => {
@@ -89,8 +92,13 @@ export default async function feeRoutes(fastify: FastifyInstance) {
     const { studentId } = request.params as { studentId: string };
     const body = createInvoiceSchema.parse(request.body);
 
-    const student = await prisma.student.findFirst({ where: { id: studentId, instituteId: asStaff(request.user).instituteId } });
+    const { instituteId } = asStaff(request.user);
+    const student = await prisma.student.findFirst({ where: { id: studentId, instituteId } });
     if (!student) return reply.code(404).send({ error: "Not found" });
+
+    if (body.orgUnitId && !(await findOrgUnit(body.orgUnitId, instituteId))) {
+      return reply.code(404).send({ error: "Group not found" });
+    }
 
     const invoice = await prisma.feeInvoice.create({
       data: { studentId, orgUnitId: body.orgUnitId, amount: body.amount, dueDate: body.dueDate, notes: body.notes },
@@ -110,18 +118,24 @@ export default async function feeRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: "Not found" });
     }
 
-    const payment = await prisma.feePayment.create({
-      data: {
-        invoiceId,
-        amount: body.amount,
-        method: body.method,
-        paidAt: body.paidAt,
-        notes: body.notes,
-        recordedById: staff.userId,
-      },
-    });
+    // Recording the payment and recalculating the invoice's status must
+    // succeed or fail together — otherwise a crash between the two leaves a
+    // real payment on record against a stale (still PENDING/PARTIAL) invoice.
+    const { payment, status } = await prisma.$transaction(async (tx) => {
+      const payment = await tx.feePayment.create({
+        data: {
+          invoiceId,
+          amount: body.amount,
+          method: body.method,
+          paidAt: body.paidAt,
+          notes: body.notes,
+          recordedById: staff.userId,
+        },
+      });
 
-    const status = await recalculateInvoiceStatus(invoiceId);
+      const status = await recalculateInvoiceStatus(invoiceId, tx);
+      return { payment, status };
+    });
 
     await logAudit({
       actor: staff,

@@ -1,7 +1,7 @@
 import { prisma } from "../db.js";
 
 export type Identity =
-  | { kind: "STAFF"; userId: string; instituteId: string; role: "OWNER" | "TEACHER" }
+  | { kind: "STAFF"; userId: string; instituteId: string; role: "OWNER" | "TEACHER" | "ACCOUNTANT" }
   | { kind: "STUDENT"; studentAccountId: string };
 
 /** Resolves a login email to whichever account owns it — a staff User or a StudentAccount. */
