@@ -51,6 +51,13 @@ export default async function authRoutes(fastify: FastifyInstance) {
     // levels entirely falls back to the type's default template.
     const levelNames = body.levels ?? ORG_TEMPLATES[body.type] ?? [];
 
+    // Send the code first: if email delivery fails, the request just 500s
+    // with nothing created, and the caller can retry /register cleanly. The
+    // reverse order (create-then-send) let a transient email failure leave
+    // a real institute behind with no way to ever log into it — a retry
+    // hit the "already exists" check below with no working code in hand.
+    await issueOtpForEmail(body.email);
+
     await prisma.institute.create({
       data: {
         name: body.instituteName,
@@ -63,8 +70,6 @@ export default async function authRoutes(fastify: FastifyInstance) {
         },
       },
     });
-
-    await issueOtpForEmail(body.email);
 
     return reply.code(201).send({ message: GENERIC_OTP_SENT_MESSAGE });
   });
@@ -80,8 +85,10 @@ export default async function authRoutes(fastify: FastifyInstance) {
       return reply.code(409).send({ error: "An account with this email already exists" });
     }
 
-    await prisma.studentAccount.create({ data: { name: body.name, email: body.email } });
+    // Same ordering rationale as /register: send first, create only once the
+    // code has actually gone out.
     await issueOtpForEmail(body.email);
+    await prisma.studentAccount.create({ data: { name: body.name, email: body.email } });
 
     return reply.code(201).send({ message: GENERIC_OTP_SENT_MESSAGE });
   });

@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../../auth/AuthContext";
 import { api, ApiError } from "../../lib/api";
+import { useApiData } from "../../lib/useApiData";
+import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 import { Modal } from "../../components/Modal";
 import { FormField, TextInput } from "../../components/FormField";
+
+const PAGE_SIZE = 50;
 
 interface Student {
   id: string;
@@ -17,17 +22,40 @@ interface Student {
   enrollments: { orgUnit: { id: string; name: string; depth: number } }[];
 }
 
+interface StudentPage {
+  items: Student[];
+  total: number;
+}
+
 export function StudentsPage() {
-  const [students, setStudents] = useState<Student[] | null>(null);
+  const { identity } = useAuth();
+  const isOwner = identity?.kind === "STAFF" && identity.role === "OWNER";
+
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(0);
   const [showAdd, setShowAdd] = useState(false);
   const [inviteTarget, setInviteTarget] = useState<Student | null>(null);
 
-  function load(q = "") {
-    api.get<Student[]>(`/api/students${q ? `?search=${encodeURIComponent(q)}` : ""}`).then(setStudents);
-  }
+  // Debounce so fast typing doesn't fire a request per keystroke, and reset
+  // to page 1 whenever the search term actually changes.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(0);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  useEffect(() => load(), []);
+  const { data, loading, error, reload } = useApiData<StudentPage>(
+    () =>
+      api.get<StudentPage>(
+        `/api/students?take=${PAGE_SIZE}&skip=${page * PAGE_SIZE}${
+          debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : ""
+        }`
+      ),
+    [debouncedSearch, page]
+  );
 
   function accessLabel(s: Student) {
     if (!s.studentAccountId) return "No access";
@@ -39,48 +67,65 @@ export function StudentsPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h1 style={{ fontSize: 26, margin: 0 }}>Students</h1>
-        <button type="button" className="btn btn-primary" onClick={() => setShowAdd(true)}>
-          Add student
-        </button>
+        {isOwner && (
+          <button type="button" className="btn btn-primary" onClick={() => setShowAdd(true)}>
+            Add student
+          </button>
+        )}
       </div>
 
       <div style={{ marginBottom: 16, maxWidth: 320 }}>
-        <TextInput
-          placeholder="Search by name…"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            load(e.target.value);
-          }}
-        />
+        <TextInput placeholder="Search by name…" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      {students && (
-        <DataTable
-          rows={students}
-          rowKey={(s) => s.id}
-          emptyMessage="No students yet."
-          columns={[
-            { header: "Name", render: (s) => <Link to={`/dashboard/students/${s.id}`}>{s.name}</Link> },
-            { header: "Groups", render: (s) => s.enrollments.map((e) => e.orgUnit.name).join(", ") || "—" },
-            { header: "Portal access", render: (s) => accessLabel(s) },
-            {
-              header: "",
-              render: (s) =>
-                !s.studentAccountId ? (
-                  <button type="button" className="btn btn-ghost" style={{ fontSize: 13, padding: 0 }} onClick={() => setInviteTarget(s)}>
-                    Invite
+      <AsyncState loading={loading} error={error} data={data} onRetry={reload}>
+        {(page_) => (
+          <>
+            <DataTable
+              rows={page_.items}
+              rowKey={(s) => s.id}
+              emptyMessage="No students yet."
+              columns={[
+                { header: "Name", render: (s) => <Link to={`/dashboard/students/${s.id}`}>{s.name}</Link> },
+                { header: "Groups", render: (s) => s.enrollments.map((e) => e.orgUnit.name).join(", ") || "—" },
+                { header: "Portal access", render: (s) => accessLabel(s) },
+                {
+                  header: "",
+                  render: (s) =>
+                    isOwner && !s.studentAccountId ? (
+                      <button type="button" className="btn btn-ghost" style={{ fontSize: 13, padding: 0 }} onClick={() => setInviteTarget(s)}>
+                        Invite
+                      </button>
+                    ) : null,
+                },
+              ]}
+            />
+            {page_.total > PAGE_SIZE && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, fontSize: 13 }}>
+                <span style={{ color: "color-mix(in srgb, var(--color-text) 60%, transparent)" }}>
+                  {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, page_.total)} of {page_.total}
+                </span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button type="button" className="btn btn-secondary" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+                    Previous
                   </button>
-                ) : null,
-            },
-          ]}
-        />
-      )}
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={(page + 1) * PAGE_SIZE >= page_.total}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </AsyncState>
 
-      {showAdd && <AddStudentModal onClose={() => setShowAdd(false)} onCreated={() => load(search)} />}
-      {inviteTarget && (
-        <InviteStudentModal student={inviteTarget} onClose={() => setInviteTarget(null)} onInvited={() => load(search)} />
-      )}
+      {showAdd && <AddStudentModal onClose={() => setShowAdd(false)} onCreated={reload} />}
+      {inviteTarget && <InviteStudentModal student={inviteTarget} onClose={() => setInviteTarget(null)} onInvited={reload} />}
     </div>
   );
 }

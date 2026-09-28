@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../lib/api";
+import { useApiData } from "../../lib/useApiData";
+import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 import { Select } from "../../components/FormField";
 
@@ -14,12 +16,11 @@ interface Invoice {
 }
 
 export function FeesPage() {
-  const [invoices, setInvoices] = useState<Invoice[] | null>(null);
   const [status, setStatus] = useState("");
-
-  useEffect(() => {
-    api.get<Invoice[]>(`/api/invoices${status ? `?status=${status}` : ""}`).then(setInvoices);
-  }, [status]);
+  const { data: invoices, loading, error, reload } = useApiData(
+    () => api.get<Invoice[]>(`/api/invoices${status ? `?status=${status}` : ""}`),
+    [status]
+  );
 
   return (
     <div>
@@ -34,20 +35,22 @@ export function FeesPage() {
         </Select>
       </div>
 
-      {invoices && (
-        <DataTable
-          rows={invoices}
-          rowKey={(i) => i.id}
-          emptyMessage="No invoices found."
-          columns={[
-            { header: "Student", render: (i) => <Link to={`/dashboard/students/${i.student.id}`}>{i.student.name}</Link> },
-            { header: "Amount", render: (i) => `₹${i.amount}` },
-            { header: "Paid", render: (i) => `₹${i.payments.reduce((s, p) => s + Number(p.amount), 0)}` },
-            { header: "Due", render: (i) => new Date(i.dueDate).toLocaleDateString() },
-            { header: "Status", render: (i) => i.status },
-          ]}
-        />
-      )}
+      <AsyncState loading={loading} error={error} data={invoices} onRetry={reload}>
+        {(invoices) => (
+          <DataTable
+            rows={invoices}
+            rowKey={(i) => i.id}
+            emptyMessage="No invoices found."
+            columns={[
+              { header: "Student", render: (i) => <Link to={`/dashboard/students/${i.student.id}`}>{i.student.name}</Link> },
+              { header: "Amount", render: (i) => `₹${i.amount}` },
+              { header: "Paid", render: (i) => `₹${i.payments.reduce((s, p) => s + Number(p.amount), 0)}` },
+              { header: "Due", render: (i) => new Date(i.dueDate).toLocaleDateString() },
+              { header: "Status", render: (i) => i.status },
+            ]}
+          />
+        )}
+      </AsyncState>
     </div>
   );
 }

@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useAuth } from "../../auth/AuthContext";
 import { api, ApiError } from "../../lib/api";
+import { useApiData } from "../../lib/useApiData";
+import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 import { Modal } from "../../components/Modal";
 import { FormField, Select, TextInput } from "../../components/FormField";
@@ -34,93 +37,95 @@ interface StudentDetail {
 
 export function StudentDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [student, setStudent] = useState<StudentDetail | null>(null);
+  const { identity } = useAuth();
+  const canSeeFees = identity?.kind === "STAFF" && (identity.role === "OWNER" || identity.role === "ACCOUNTANT");
+  const { data: student, loading, error, reload } = useApiData<StudentDetail>(() => api.get<StudentDetail>(`/api/students/${id}`), [id]);
   const [showInvoice, setShowInvoice] = useState(false);
   const [payTarget, setPayTarget] = useState<Invoice | null>(null);
 
-  function load() {
-    api.get<StudentDetail>(`/api/students/${id}`).then(setStudent);
-  }
-
-  useEffect(load, [id]);
-
-  if (!student) return null;
-
   return (
-    <div>
-      <h1 style={{ fontSize: 26, marginBottom: 4 }}>{student.name}</h1>
-      <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 24 }}>
-        {student.enrollments.map((e) => e.orgUnit.name).join(", ") || "Not in a group yet"} ·{" "}
-        {student.phone ?? "No phone on file"}
-      </p>
+    <AsyncState loading={loading} error={error} data={student} onRetry={reload}>
+      {(student) => (
+        <div>
+          <h1 style={{ fontSize: 26, marginBottom: 4 }}>{student.name}</h1>
+          <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 24 }}>
+            {student.enrollments.map((e) => e.orgUnit.name).join(", ") || "Not in a group yet"} ·{" "}
+            {student.phone ?? "No phone on file"}
+          </p>
 
-      <h2 style={{ fontSize: 18, marginBottom: 10 }}>Groups</h2>
-      <DataTable
-        rows={student.enrollments}
-        rowKey={(e) => e.orgUnit.id}
-        emptyMessage="Not in any group yet."
-        columns={[
-          {
-            header: "Group",
-            render: (e) => <Link to={`/dashboard/structure/${e.orgUnit.id}`}>{e.orgUnit.name}</Link>,
-          },
-        ]}
-      />
-
-      {student.courseEnrollments.length > 0 && (
-        <>
-          <h2 style={{ fontSize: 18, margin: "28px 0 10px" }}>Electives</h2>
+          <h2 style={{ fontSize: 18, marginBottom: 10 }}>Groups</h2>
           <DataTable
-            rows={student.courseEnrollments}
-            rowKey={(c) => c.course.id}
-            emptyMessage=""
+            rows={student.enrollments}
+            rowKey={(e) => e.orgUnit.id}
+            emptyMessage="Not in any group yet."
             columns={[
               {
-                header: "Subject",
-                render: (c) => <Link to={`/dashboard/courses/${c.course.id}`}>{c.course.name}</Link>,
+                header: "Group",
+                render: (e) => <Link to={`/dashboard/structure/${e.orgUnit.id}`}>{e.orgUnit.name}</Link>,
               },
             ]}
           />
-        </>
-      )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "28px 0 10px" }}>
-        <h2 style={{ fontSize: 18, margin: 0 }}>Fees</h2>
-        <button type="button" className="btn btn-ghost" style={{ fontSize: 13, padding: 0 }} onClick={() => setShowInvoice(true)}>
-          New invoice
-        </button>
-      </div>
-      <DataTable
-        rows={student.invoices}
-        rowKey={(i) => i.id}
-        emptyMessage="No invoices yet."
-        columns={[
-          { header: "Amount", render: (i) => `₹${i.amount}` },
-          { header: "Due", render: (i) => new Date(i.dueDate).toLocaleDateString() },
-          { header: "Status", render: (i) => i.status },
-          { header: "Paid", render: (i) => `₹${i.payments.reduce((s, p) => s + Number(p.amount), 0)}` },
-          {
-            header: "",
-            render: (i) =>
-              i.status !== "PAID" ? (
-                <button type="button" className="btn btn-ghost" style={{ fontSize: 13, padding: 0 }} onClick={() => setPayTarget(i)}>
-                  Record payment
+          {student.courseEnrollments.length > 0 && (
+            <>
+              <h2 style={{ fontSize: 18, margin: "28px 0 10px" }}>Electives</h2>
+              <DataTable
+                rows={student.courseEnrollments}
+                rowKey={(c) => c.course.id}
+                emptyMessage=""
+                columns={[
+                  {
+                    header: "Subject",
+                    render: (c) => <Link to={`/dashboard/courses/${c.course.id}`}>{c.course.name}</Link>,
+                  },
+                ]}
+              />
+            </>
+          )}
+
+          {canSeeFees && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "28px 0 10px" }}>
+                <h2 style={{ fontSize: 18, margin: 0 }}>Fees</h2>
+                <button type="button" className="btn btn-ghost" style={{ fontSize: 13, padding: 0 }} onClick={() => setShowInvoice(true)}>
+                  New invoice
                 </button>
-              ) : null,
-          },
-        ]}
-      />
+              </div>
+              <DataTable
+                rows={student.invoices}
+                rowKey={(i) => i.id}
+                emptyMessage="No invoices yet."
+                columns={[
+                  { header: "Amount", render: (i) => `₹${i.amount}` },
+                  { header: "Due", render: (i) => new Date(i.dueDate).toLocaleDateString() },
+                  { header: "Status", render: (i) => i.status },
+                  { header: "Paid", render: (i) => `₹${i.payments.reduce((s, p) => s + Number(p.amount), 0)}` },
+                  {
+                    header: "",
+                    render: (i) =>
+                      i.status !== "PAID" ? (
+                        <button type="button" className="btn btn-ghost" style={{ fontSize: 13, padding: 0 }} onClick={() => setPayTarget(i)}>
+                          Record payment
+                        </button>
+                      ) : null,
+                  },
+                ]}
+              />
+            </>
+          )}
 
-      {showInvoice && (
-        <NewInvoiceModal
-          studentId={student.id}
-          units={student.enrollments.map((e) => e.orgUnit)}
-          onClose={() => setShowInvoice(false)}
-          onCreated={load}
-        />
+          {showInvoice && (
+            <NewInvoiceModal
+              studentId={student.id}
+              units={student.enrollments.map((e) => e.orgUnit)}
+              onClose={() => setShowInvoice(false)}
+              onCreated={reload}
+            />
+          )}
+          {payTarget && <RecordPaymentModal invoice={payTarget} onClose={() => setPayTarget(null)} onRecorded={reload} />}
+        </div>
       )}
-      {payTarget && <RecordPaymentModal invoice={payTarget} onClose={() => setPayTarget(null)} onRecorded={load} />}
-    </div>
+    </AsyncState>
   );
 }
 

@@ -1,12 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, getToken, setToken } from "../lib/api";
+import { api, getToken, setToken, setUnauthorizedHandler } from "../lib/api";
 
 export interface StaffIdentity {
   kind: "STAFF";
   id: string;
   name: string;
   email: string;
-  role: "OWNER" | "TEACHER";
+  role: "OWNER" | "TEACHER" | "ACCOUNTANT";
   instituteId: string;
 }
 
@@ -53,6 +53,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => setIdentity(null));
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   const requestOtp = useCallback(async (email: string) => {
     await api.post("/api/auth/otp/request", { email });

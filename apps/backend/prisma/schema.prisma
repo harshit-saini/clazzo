@@ -37,6 +37,10 @@ model Institute {
 enum StaffRole {
   OWNER
   TEACHER
+  /// Can manage fee structures, invoices and payments, but not staff,
+  /// structure, or courses — for a front-desk/accounts hire who shouldn't
+  /// need full OWNER access.
+  ACCOUNTANT
 }
 
 /// A teacher or institute owner. Always has platform access (unlike Student).

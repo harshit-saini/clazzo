@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../../auth/AuthContext";
 import { api, ApiError } from "../../lib/api";
+import { useApiData } from "../../lib/useApiData";
+import { AsyncState } from "../../components/AsyncState";
 import { FormField, TextInput } from "../../components/FormField";
 import { Modal } from "../../components/Modal";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { LevelLadderEditor } from "../../components/LevelLadderEditor";
 import { ORG_TEMPLATES } from "../../lib/orgTemplates";
 import { ChevronRightIcon, PlusIcon } from "../../icons";
@@ -26,6 +30,11 @@ interface OrgUnit {
   directCourses: number;
 }
 
+interface StructureData {
+  levels: OrgLevel[];
+  units: OrgUnit[];
+}
+
 /// Students and subjects attached to descendants count towards a parent —
 /// "Class 12" should read as the size of 12A + 12B, not zero.
 function rollUp(units: OrgUnit[], unit: OrgUnit) {
@@ -45,11 +54,20 @@ function loadCollapsed(): Set<string> {
 }
 
 export function StructurePage() {
-  const [levels, setLevels] = useState<OrgLevel[] | null>(null);
-  const [units, setUnits] = useState<OrgUnit[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { identity } = useAuth();
+  const isOwner = identity?.kind === "STAFF" && identity.role === "OWNER";
+
+  const { data, loading, error: loadError, reload } = useApiData<StructureData>(() =>
+    Promise.all([api.get<OrgLevel[]>("/api/structure/levels"), api.get<OrgUnit[]>("/api/structure/units")]).then(
+      ([levels, units]) => ({ levels, units })
+    )
+  );
+
+  const [actionError, setActionError] = useState<string | null>(null);
   const [addingUnder, setAddingUnder] = useState<OrgUnit | null | undefined>(undefined);
   const [editingLevels, setEditingLevels] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<OrgUnit | null>(null);
+  const [archiving, setArchiving] = useState(false);
   // Collapsed rather than expanded, so a brand-new group is open by default.
   const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
 
@@ -65,128 +83,151 @@ export function StructurePage() {
     persistCollapsed(next);
   }
 
-  function load() {
-    api.get<OrgLevel[]>("/api/structure/levels").then(setLevels);
-    api.get<OrgUnit[]>("/api/structure/units").then(setUnits);
-  }
-
-  useEffect(load, []);
-
-  async function handleArchive(unit: OrgUnit) {
-    const { students } = rollUp(units ?? [], unit);
-    const hasChildren = (units ?? []).some((u) => u.parentId === unit.id);
-    const warning = hasChildren
-      ? `Archive "${unit.name}" and everything inside it?`
-      : `Archive "${unit.name}"?`;
-    if (!confirm(students > 0 ? `${warning} ${students} student(s) are enrolled here.` : warning)) return;
-
+  async function handleArchiveConfirmed() {
+    if (!archiveTarget) return;
+    setArchiving(true);
     try {
-      await api.delete(`/api/structure/units/${unit.id}`);
-      load();
+      await api.delete(`/api/structure/units/${archiveTarget.id}`);
+      setArchiveTarget(null);
+      reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not archive.");
+      setActionError(err instanceof ApiError ? err.message : "Could not archive.");
+    } finally {
+      setArchiving(false);
     }
   }
 
-  if (!levels || !units) return null;
-
-  const roots = units.filter((u) => !u.parentId);
-  const parentIds = units.filter((u) => units.some((c) => c.parentId === u.id)).map((u) => u.id);
-  const ladder = levels.map((l) => l.name).join(" › ") || "No levels defined";
-  const allCollapsed = parentIds.length > 0 && parentIds.every((id) => collapsed.has(id));
-
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ fontSize: 26, marginBottom: 4 }}>Structure</h1>
-          <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", margin: "0 0 6px" }}>
-            How your organization is arranged: <strong>{ladder}</strong>.{" "}
-            <button
-              type="button"
-              className="btn btn-ghost"
-              style={{ fontSize: 13, padding: 0 }}
-              onClick={() => setEditingLevels(true)}
-            >
-              Edit levels
-            </button>
-          </p>
-        </div>
-        {parentIds.length > 0 && (
-          <button
-            type="button"
-            className="btn btn-ghost"
-            style={{ fontSize: 13 }}
-            onClick={() => persistCollapsed(allCollapsed ? new Set() : new Set(parentIds))}
-          >
-            {allCollapsed ? "Expand all" : "Collapse all"}
-          </button>
-        )}
-      </div>
+    <AsyncState loading={loading} error={loadError} data={data} onRetry={reload}>
+      {({ levels, units }) => {
+        const roots = units.filter((u) => !u.parentId);
+        const parentIds = units.filter((u) => units.some((c) => c.parentId === u.id)).map((u) => u.id);
+        const ladder = levels.map((l) => l.name).join(" › ") || "No levels defined";
+        const allCollapsed = parentIds.length > 0 && parentIds.every((id) => collapsed.has(id));
+        const archiveRollup = archiveTarget ? rollUp(units, archiveTarget) : null;
+        const archiveHasChildren = archiveTarget ? units.some((u) => u.parentId === archiveTarget.id) : false;
 
-      <p style={{ color: "color-mix(in srgb, var(--color-text) 55%, transparent)", fontSize: 13, marginBottom: 22 }}>
-        Students enrolled in a group also count towards everything above it, and a subject added to a
-        group is taught to everything inside it.
-      </p>
+        return (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+              <div>
+                <h1 style={{ fontSize: 26, marginBottom: 4 }}>Structure</h1>
+                <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", margin: "0 0 6px" }}>
+                  How your organization is arranged: <strong>{ladder}</strong>.{" "}
+                  {isOwner && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={{ fontSize: 13, padding: 0 }}
+                      onClick={() => setEditingLevels(true)}
+                    >
+                      Edit levels
+                    </button>
+                  )}
+                </p>
+              </div>
+              {parentIds.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ fontSize: 13 }}
+                  onClick={() => persistCollapsed(allCollapsed ? new Set() : new Set(parentIds))}
+                >
+                  {allCollapsed ? "Expand all" : "Collapse all"}
+                </button>
+              )}
+            </div>
 
-      {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+            <p style={{ color: "color-mix(in srgb, var(--color-text) 55%, transparent)", fontSize: 13, marginBottom: 22 }}>
+              Students enrolled in a group also count towards everything above it, and a subject added to a
+              group is taught to everything inside it.
+            </p>
 
-      <button
-        type="button"
-        className="btn btn-primary"
-        style={{ marginBottom: 18, display: "inline-flex", alignItems: "center", gap: 7 }}
-        onClick={() => setAddingUnder(null)}
-      >
-        <PlusIcon size={15} /> Add {levels[0]?.name ?? "group"}
-      </button>
+            {actionError && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{actionError}</p>}
 
-      {roots.length === 0 ? (
-        <div
-          className="card"
-          style={{ padding: 28, alignItems: "center", textAlign: "center", color: "var(--color-neutral-600)" }}
-        >
-          Nothing set up yet — add your first {levels[0]?.name?.toLowerCase() ?? "group"} to get started.
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {roots.map((root) => (
-            <UnitNode
-              key={root.id}
-              unit={root}
-              units={units}
-              levels={levels}
-              collapsed={collapsed}
-              onToggle={toggle}
-              onAddChild={setAddingUnder}
-              onArchive={handleArchive}
-            />
-          ))}
-        </div>
-      )}
+            {isOwner && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ marginBottom: 18, display: "inline-flex", alignItems: "center", gap: 7 }}
+                onClick={() => setAddingUnder(null)}
+              >
+                <PlusIcon size={15} /> Add {levels[0]?.name ?? "group"}
+              </button>
+            )}
 
-      {addingUnder !== undefined && (
-        <AddUnitModal
-          parent={addingUnder}
-          levels={levels}
-          onClose={() => setAddingUnder(undefined)}
-          onCreated={() => {
-            setAddingUnder(undefined);
-            load();
-          }}
-        />
-      )}
+            {roots.length === 0 ? (
+              <div
+                className="card"
+                style={{ padding: 28, alignItems: "center", textAlign: "center", color: "var(--color-neutral-600)" }}
+              >
+                Nothing set up yet{isOwner ? ` — add your first ${levels[0]?.name?.toLowerCase() ?? "group"} to get started.` : "."}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {roots.map((root) => (
+                  <UnitNode
+                    key={root.id}
+                    unit={root}
+                    units={units}
+                    levels={levels}
+                    collapsed={collapsed}
+                    canManage={isOwner}
+                    onToggle={toggle}
+                    onAddChild={setAddingUnder}
+                    onArchive={setArchiveTarget}
+                  />
+                ))}
+              </div>
+            )}
 
-      {editingLevels && (
-        <EditLevelsModal
-          levels={levels}
-          onClose={() => setEditingLevels(false)}
-          onSaved={() => {
-            setEditingLevels(false);
-            load();
-          }}
-        />
-      )}
-    </div>
+            {addingUnder !== undefined && (
+              <AddUnitModal
+                parent={addingUnder}
+                levels={levels}
+                onClose={() => setAddingUnder(undefined)}
+                onCreated={() => {
+                  setAddingUnder(undefined);
+                  reload();
+                }}
+              />
+            )}
+
+            {editingLevels && (
+              <EditLevelsModal
+                levels={levels}
+                onClose={() => setEditingLevels(false)}
+                onSaved={() => {
+                  setEditingLevels(false);
+                  reload();
+                }}
+              />
+            )}
+
+            {archiveTarget && (
+              <ConfirmModal
+                title={`Archive "${archiveTarget.name}"?`}
+                confirmLabel="Archive"
+                busy={archiving}
+                onClose={() => setArchiveTarget(null)}
+                onConfirm={handleArchiveConfirmed}
+                body={
+                  <>
+                    {archiveHasChildren && <p style={{ margin: "0 0 8px" }}>This will also archive everything inside it.</p>}
+                    {archiveRollup && archiveRollup.students > 0 && (
+                      <p style={{ margin: 0 }}>
+                        {archiveRollup.students} student{archiveRollup.students === 1 ? "" : "s"} enrolled here will lose this group
+                        from their record.
+                      </p>
+                    )}
+                  </>
+                }
+              />
+            )}
+          </div>
+        );
+      }}
+    </AsyncState>
   );
 }
 
@@ -195,6 +236,7 @@ function UnitNode({
   units,
   levels,
   collapsed,
+  canManage,
   onToggle,
   onAddChild,
   onArchive,
@@ -203,6 +245,7 @@ function UnitNode({
   units: OrgUnit[];
   levels: OrgLevel[];
   collapsed: Set<string>;
+  canManage: boolean;
   onToggle: (id: string) => void;
   onAddChild: (u: OrgUnit) => void;
   onArchive: (u: OrgUnit) => void;
@@ -242,16 +285,18 @@ function UnitNode({
 
         {unit.level && <span className="tree-level-pill">{unit.level.name}</span>}
 
-        <div className="tree-actions">
-          {childLevel && (
-            <button type="button" className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => onAddChild(unit)}>
-              Add {childLevel.name}
+        {canManage && (
+          <div className="tree-actions">
+            {childLevel && (
+              <button type="button" className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => onAddChild(unit)}>
+                Add {childLevel.name}
+              </button>
+            )}
+            <button type="button" className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => onArchive(unit)}>
+              Archive
             </button>
-          )}
-          <button type="button" className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => onArchive(unit)}>
-            Archive
-          </button>
-        </div>
+          </div>
+        )}
       </div>
 
       {isOpen && (
@@ -263,6 +308,7 @@ function UnitNode({
               units={units}
               levels={levels}
               collapsed={collapsed}
+              canManage={canManage}
               onToggle={onToggle}
               onAddChild={onAddChild}
               onArchive={onArchive}

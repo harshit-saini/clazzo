@@ -10,6 +10,17 @@ export function setToken(token: string | null) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+// AuthContext registers itself here on mount so a 401 from any request —
+// including one that fires mid-session (expired token, deactivated
+// account) — can clear its in-memory identity immediately. Without this,
+// api.ts clearing localStorage did nothing to the identity already held in
+// React state, so RequireAuth never noticed and the page just stayed put
+// showing stale data instead of redirecting to /login.
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler;
+}
+
 export class ApiError extends Error {
   status: number;
   issues?: unknown;
@@ -44,7 +55,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const data = contentType.includes("application/json") ? await res.json() : undefined;
 
   if (!res.ok) {
-    if (res.status === 401) setToken(null);
+    if (res.status === 401) {
+      setToken(null);
+      onUnauthorized?.();
+    }
     throw new ApiError(res.status, data?.error ?? `Request failed (${res.status})`, data?.issues);
   }
 
