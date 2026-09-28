@@ -60,12 +60,21 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     const roster = await rosterForSession(session);
     const marked = new Map(session.attendance.map((a) => [a.studentId, a] as const));
 
-    return roster.map((student) => ({
-      studentId: student.id,
-      studentName: student.name,
-      status: marked.get(student.id)?.status ?? null,
-      markedAt: marked.get(student.id)?.markedAt ?? null,
-    }));
+    return {
+      session: {
+        date: session.date,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        orgUnit: { id: session.orgUnit.id, name: session.orgUnit.name },
+        course: session.course ? { id: session.course.id, name: session.course.name } : null,
+      },
+      roster: roster.map((student) => ({
+        studentId: student.id,
+        studentName: student.name,
+        status: marked.get(student.id)?.status ?? null,
+        markedAt: marked.get(student.id)?.markedAt ?? null,
+      })),
+    };
   });
 
   fastify.post("/sessions/:sessionId/attendance", async (request, reply) => {

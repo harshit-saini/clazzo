@@ -65,6 +65,22 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return data as T;
 }
 
+/** Flattens the backend's Zod `issues` array into a `{ field: message }` map
+ * so a form can point a validation error at the specific input, instead of
+ * only ever showing one generic banner below the whole form. */
+export function fieldErrors(issues: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!Array.isArray(issues)) return out;
+  for (const issue of issues) {
+    if (issue && typeof issue === "object" && "path" in issue && "message" in issue) {
+      const path = (issue as { path: unknown }).path;
+      const key = Array.isArray(path) ? path.join(".") : String(path);
+      if (key) out[key] = String((issue as { message: unknown }).message);
+    }
+  }
+  return out;
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body }),

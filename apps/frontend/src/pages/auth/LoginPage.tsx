@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { ApiError } from "../../lib/api";
 import { FormField, TextInput } from "../../components/FormField";
@@ -7,8 +7,9 @@ import { FormField, TextInput } from "../../components/FormField";
 export function LoginPage() {
   const { requestOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [step, setStep] = useState<"email" | "code">("email");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -59,7 +60,7 @@ export function LoginPage() {
                 placeholder="you@example.com"
               />
             </FormField>
-            {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+            {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
             <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
               {busy ? "Sending…" : "Send login code"}
             </button>
@@ -81,7 +82,7 @@ export function LoginPage() {
                 placeholder="123456"
               />
             </FormField>
-            {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+            {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
             <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
               {busy ? "Verifying…" : "Verify & log in"}
             </button>

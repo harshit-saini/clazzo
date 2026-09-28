@@ -7,6 +7,8 @@ import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 import { Modal } from "../../components/Modal";
 import { FormField, Select, TextInput } from "../../components/FormField";
+import { useToast } from "../../components/ToastContext";
+import { InvoiceStatusTag } from "../../components/StatusTag";
 
 interface Payment {
   id: string;
@@ -44,9 +46,12 @@ export function StudentDetailPage() {
   const [payTarget, setPayTarget] = useState<Invoice | null>(null);
 
   return (
-    <AsyncState loading={loading} error={error} data={student} onRetry={reload}>
+    <AsyncState loading={loading} error={error} data={student} onRetry={reload} backTo="/dashboard/students" backLabel="Back to students">
       {(student) => (
         <div>
+          <p style={{ fontSize: 13, color: "color-mix(in srgb, var(--color-text) 60%, transparent)", marginBottom: 2 }}>
+            <Link to="/dashboard/students">Students</Link>
+          </p>
           <h1 style={{ fontSize: 26, marginBottom: 4 }}>{student.name}</h1>
           <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 24 }}>
             {student.enrollments.map((e) => e.orgUnit.name).join(", ") || "Not in a group yet"} ·{" "}
@@ -87,7 +92,7 @@ export function StudentDetailPage() {
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "28px 0 10px" }}>
                 <h2 style={{ fontSize: 18, margin: 0 }}>Fees</h2>
-                <button type="button" className="btn btn-ghost" style={{ fontSize: 13, padding: 0 }} onClick={() => setShowInvoice(true)}>
+                <button type="button" className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => setShowInvoice(true)}>
                   New invoice
                 </button>
               </div>
@@ -98,13 +103,13 @@ export function StudentDetailPage() {
                 columns={[
                   { header: "Amount", render: (i) => `₹${i.amount}` },
                   { header: "Due", render: (i) => new Date(i.dueDate).toLocaleDateString() },
-                  { header: "Status", render: (i) => i.status },
+                  { header: "Status", render: (i) => <InvoiceStatusTag status={i.status} /> },
                   { header: "Paid", render: (i) => `₹${i.payments.reduce((s, p) => s + Number(p.amount), 0)}` },
                   {
                     header: "",
                     render: (i) =>
                       i.status !== "PAID" ? (
-                        <button type="button" className="btn btn-ghost" style={{ fontSize: 13, padding: 0 }} onClick={() => setPayTarget(i)}>
+                        <button type="button" className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => setPayTarget(i)}>
                           Record payment
                         </button>
                       ) : null,
@@ -140,6 +145,7 @@ function NewInvoiceModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const showToast = useToast();
   const [form, setForm] = useState({ orgUnitId: units[0]?.id ?? "", amount: "", dueDate: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -156,6 +162,7 @@ function NewInvoiceModal({
       });
       onCreated();
       onClose();
+      showToast("Invoice created.");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create invoice.");
     } finally {
@@ -164,7 +171,7 @@ function NewInvoiceModal({
   }
 
   return (
-    <Modal title="New invoice" onClose={onClose}>
+    <Modal title="New invoice" onClose={onClose} busy={busy}>
       <form onSubmit={handleSubmit}>
         {units.length > 0 && (
           <FormField label="Group">
@@ -177,13 +184,13 @@ function NewInvoiceModal({
             </Select>
           </FormField>
         )}
-        <FormField label="Amount (₹)">
+        <FormField label="Amount (₹)" required>
           <TextInput type="number" min="0" step="0.01" required autoFocus value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
         </FormField>
-        <FormField label="Due date">
+        <FormField label="Due date" required>
           <TextInput type="date" required value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
         </FormField>
-        {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+        {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
         <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
           {busy ? "Creating…" : "Create invoice"}
         </button>
@@ -195,6 +202,7 @@ function NewInvoiceModal({
 function RecordPaymentModal({ invoice, onClose, onRecorded }: { invoice: Invoice; onClose: () => void; onRecorded: () => void }) {
   const paid = invoice.payments.reduce((s, p) => s + Number(p.amount), 0);
   const remaining = Number(invoice.amount) - paid;
+  const showToast = useToast();
   const [form, setForm] = useState({ amount: remaining.toFixed(2), method: "CASH" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -207,6 +215,7 @@ function RecordPaymentModal({ invoice, onClose, onRecorded }: { invoice: Invoice
       await api.post(`/api/invoices/${invoice.id}/payments`, { amount: Number(form.amount), method: form.method });
       onRecorded();
       onClose();
+      showToast(`Payment of ₹${form.amount} recorded.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not record payment.");
     } finally {
@@ -215,12 +224,12 @@ function RecordPaymentModal({ invoice, onClose, onRecorded }: { invoice: Invoice
   }
 
   return (
-    <Modal title="Record payment" onClose={onClose}>
+    <Modal title="Record payment" onClose={onClose} busy={busy}>
       <form onSubmit={handleSubmit}>
         <p style={{ fontSize: 13, color: "color-mix(in srgb, var(--color-text) 65%, transparent)" }}>
           ₹{remaining.toFixed(2)} remaining of ₹{invoice.amount}
         </p>
-        <FormField label="Amount (₹)">
+        <FormField label="Amount (₹)" required>
           <TextInput type="number" min="0" step="0.01" required autoFocus value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
         </FormField>
         <FormField label="Method">
@@ -233,7 +242,7 @@ function RecordPaymentModal({ invoice, onClose, onRecorded }: { invoice: Invoice
             <option value="OTHER">Other</option>
           </Select>
         </FormField>
-        {error && <p style={{ color: "var(--color-accent-700)", fontSize: 13 }}>{error}</p>}
+        {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
         <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
           {busy ? "Recording…" : "Record payment"}
         </button>

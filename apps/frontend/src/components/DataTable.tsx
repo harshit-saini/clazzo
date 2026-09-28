@@ -18,6 +18,7 @@ export function DataTable<T>({ columns, rows, rowKey, emptyMessage = "Nothing he
 
   return (
     <div className="table-scroll">
+      <p className="table-scroll-hint">Swipe sideways to see more →</p>
       <table className="table">
         <thead>
           <tr>

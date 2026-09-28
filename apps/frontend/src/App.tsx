@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { RequireAuth } from "./auth/RequireAuth";
 import { RootRoute } from "./pages/RootRoute";
+import { NotFoundPage } from "./pages/NotFoundPage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterInstitutePage } from "./pages/auth/RegisterInstitutePage";
 import { StudentSignupPage } from "./pages/auth/StudentSignupPage";
@@ -55,6 +56,8 @@ export default function App() {
               <Route path="institutes/:instituteId/attendance" element={<AttendanceHistoryPage />} />
             </Route>
           </Route>
+
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

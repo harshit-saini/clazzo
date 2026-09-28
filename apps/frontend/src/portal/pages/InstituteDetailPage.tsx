@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { useApiData } from "../../lib/useApiData";
 import { AsyncState } from "../../components/AsyncState";
+import { AttendanceTag, InvoiceStatusTag } from "../../components/StatusTag";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -44,9 +45,12 @@ export function InstituteDetailPage() {
   );
 
   return (
-    <AsyncState loading={loading} error={error} data={detail} onRetry={reload}>
+    <AsyncState loading={loading} error={error} data={detail} onRetry={reload} backTo="/portal" backLabel="Back to institutes">
       {(detail) => (
         <div>
+          <p style={{ fontSize: 13, color: "color-mix(in srgb, var(--color-text) 60%, transparent)", marginBottom: 2 }}>
+            <Link to="/portal">My institutes</Link>
+          </p>
           <h1 style={{ fontSize: 26, marginBottom: 4 }}>{detail.institute.name}</h1>
           <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 28 }}>
             {detail.groups.map((g) => g.breadcrumb.join(" › ")).join(", ") || "Not placed in a group yet"}
@@ -62,8 +66,11 @@ export function InstituteDetailPage() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                     <span style={{ fontFamily: "var(--font-heading)", fontSize: 17 }}>{c.name}</span>
                     {pct !== null && (
-                      <span className="tag tag-accent-2">
-                        {pct}% attendance ({c.attendance.present}/{c.attendance.total})
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <AttendanceTag pct={pct} />
+                        <span style={{ fontSize: 11.5, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>
+                          ({c.attendance.present}/{c.attendance.total})
+                        </span>
                       </span>
                     )}
                   </div>
@@ -98,7 +105,7 @@ export function InstituteDetailPage() {
                       Due {new Date(inv.dueDate).toLocaleDateString()} · Paid ₹{paid}
                     </div>
                   </div>
-                  <span className={`tag ${inv.status === "PAID" ? "tag-accent-2" : "tag-accent"}`}>{inv.status}</span>
+                  <InvoiceStatusTag status={inv.status} />
                 </div>
               );
             })}
