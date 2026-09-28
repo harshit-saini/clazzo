@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { MenuIcon } from "../icons";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -10,6 +11,7 @@ export interface NavItem {
   to: string;
   label: string;
   end?: boolean;
+  icon?: ReactNode;
 }
 
 export function AppShell({ brand, navItems, extra }: { brand: string; navItems: NavItem[]; extra?: ReactNode }) {
@@ -62,6 +64,9 @@ export function AppShell({ brand, navItems, extra }: { brand: string; navItems: 
 
   return (
     <div style={{ minHeight: "100vh", display: "flex" }}>
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
       <button
         ref={toggleRef}
         type="button"
@@ -99,7 +104,9 @@ export function AppShell({ brand, navItems, extra }: { brand: string; navItems: 
             to={item.to}
             end={item.end}
             style={({ isActive }) => ({
-              display: "block",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
               padding: "9px 12px",
               borderRadius: "var(--radius-md)",
               fontSize: 14.5,
@@ -108,6 +115,7 @@ export function AppShell({ brand, navItems, extra }: { brand: string; navItems: 
               textDecoration: "none",
             })}
           >
+            {item.icon}
             {item.label}
           </NavLink>
         ))}
@@ -126,8 +134,13 @@ export function AppShell({ brand, navItems, extra }: { brand: string; navItems: 
       {/* minWidth:0 lets this flex child shrink below its content's intrinsic
           width — without it one wide row stretches the column past the viewport
           and the page's own paragraphs get clipped. */}
-      <main ref={mainRef} className="app-shell-main" style={{ flex: 1, minWidth: 0, padding: "32px 40px", maxWidth: 1100 }}>
-        <Outlet />
+      <main id="main-content" ref={mainRef} className="app-shell-main" style={{ flex: 1, minWidth: 0, padding: "32px 40px", maxWidth: 1100 }}>
+        {/* Keyed by route so a crash on one page doesn't leave every later
+            page stuck on the same error screen — a fresh key remounts and
+            clears the boundary's caught-error state. */}
+        <ErrorBoundary key={location.pathname} compact>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );

@@ -39,7 +39,7 @@ export function StudentSignupPage() {
             <p style={{ fontSize: 14 }}>
               Check <strong>{form.email}</strong> for a login code to get started.
             </p>
-            <button type="button" className="btn btn-primary btn-block" onClick={() => navigate("/login")}>
+            <button type="button" className="btn btn-primary btn-block" onClick={() => navigate("/login", { state: { email: form.email } })}>
               Go to login
             </button>
           </>

@@ -1,19 +1,24 @@
 import type { ReactNode } from "react";
+import { EmptyState } from "./EmptyState";
 
 export interface Column<T> {
   header: string;
   render: (row: T) => ReactNode;
   width?: string;
+  /** Bumps this column's font-weight so the row's primary identifier (a
+   * name) stands out — without this every column rendered at the same
+   * weight, so a table read as a flat wall of same-weight text. */
+  primary?: boolean;
 }
 
 export function DataTable<T>({ columns, rows, rowKey, emptyMessage = "Nothing here yet." }: {
   columns: Column<T>[];
   rows: T[];
   rowKey: (row: T) => string;
-  emptyMessage?: string;
+  emptyMessage?: ReactNode;
 }) {
   if (rows.length === 0) {
-    return <p style={{ color: "color-mix(in srgb, var(--color-text) 60%, transparent)" }}>{emptyMessage}</p>;
+    return <EmptyState title={emptyMessage} />;
   }
 
   return (
@@ -33,7 +38,9 @@ export function DataTable<T>({ columns, rows, rowKey, emptyMessage = "Nothing he
           {rows.map((row) => (
             <tr key={rowKey(row)}>
               {columns.map((col) => (
-                <td key={col.header}>{col.render(row)}</td>
+                <td key={col.header} style={col.primary ? { fontWeight: 600 } : undefined}>
+                  {col.render(row)}
+                </td>
               ))}
             </tr>
           ))}

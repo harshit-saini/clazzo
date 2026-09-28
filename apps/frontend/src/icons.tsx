@@ -10,6 +10,24 @@ const base = (size: number) => ({
   viewBox: "0 0 24 24",
 });
 
+export function HomeIcon({ size = 24, color = "currentColor", strokeWidth = 2.75 }: IconProps) {
+  return (
+    <svg {...base(size)} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+      <path d="M9 22V12h6v10" />
+    </svg>
+  );
+}
+
+export function BookIcon({ size = 24, color = "currentColor", strokeWidth = 2.75 }: IconProps) {
+  return (
+    <svg {...base(size)} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
+    </svg>
+  );
+}
+
 export function SchoolIcon({ size = 24, color = "currentColor", strokeWidth = 2.75 }: IconProps) {
   return (
     <svg {...base(size)} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">

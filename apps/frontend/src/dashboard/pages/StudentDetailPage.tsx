@@ -9,6 +9,8 @@ import { Modal } from "../../components/Modal";
 import { FormField, Select, TextInput } from "../../components/FormField";
 import { useToast } from "../../components/ToastContext";
 import { InvoiceStatusTag } from "../../components/StatusTag";
+import { FeeSummaryStrip } from "../../components/FeeSummaryStrip";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 
 interface Payment {
   id: string;
@@ -42,6 +44,7 @@ export function StudentDetailPage() {
   const { identity } = useAuth();
   const canSeeFees = identity?.kind === "STAFF" && (identity.role === "OWNER" || identity.role === "ACCOUNTANT");
   const { data: student, loading, error, reload } = useApiData<StudentDetail>(() => api.get<StudentDetail>(`/api/students/${id}`), [id]);
+  useDocumentTitle(student?.name ?? "Student");
   const [showInvoice, setShowInvoice] = useState(false);
   const [payTarget, setPayTarget] = useState<Invoice | null>(null);
 
@@ -96,6 +99,7 @@ export function StudentDetailPage() {
                   New invoice
                 </button>
               </div>
+              <FeeSummaryStrip invoices={student.invoices} />
               <DataTable
                 rows={student.invoices}
                 rowKey={(i) => i.id}
@@ -230,7 +234,16 @@ function RecordPaymentModal({ invoice, onClose, onRecorded }: { invoice: Invoice
           ₹{remaining.toFixed(2)} remaining of ₹{invoice.amount}
         </p>
         <FormField label="Amount (₹)" required>
-          <TextInput type="number" min="0" step="0.01" required autoFocus value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+          <TextInput
+            type="number"
+            min="0"
+            max={remaining}
+            step="0.01"
+            required
+            autoFocus
+            value={form.amount}
+            onChange={(e) => setForm({ ...form, amount: e.target.value })}
+          />
         </FormField>
         <FormField label="Method">
           <Select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>

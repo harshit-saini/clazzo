@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { ApiError } from "../../lib/api";
 import { FormField, TextInput } from "../../components/FormField";
@@ -7,9 +7,12 @@ import { FormField, TextInput } from "../../components/FormField";
 export function LoginPage() {
   const { requestOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const [step, setStep] = useState<"email" | "code">("email");
-  const [email, setEmail] = useState(searchParams.get("email") ?? "");
+  const [email, setEmail] = useState(
+    (location.state as { email?: string } | null)?.email ?? searchParams.get("email") ?? ""
+  );
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

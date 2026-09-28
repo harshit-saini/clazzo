@@ -8,6 +8,7 @@ import { Modal } from "../../components/Modal";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { FormField, Select, TextInput } from "../../components/FormField";
 import { useToast } from "../../components/ToastContext";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 
 type StaffRole = "OWNER" | "TEACHER" | "ACCOUNTANT";
 
@@ -23,6 +24,7 @@ interface Staff {
 const ROLE_LABEL: Record<StaffRole, string> = { OWNER: "Owner", TEACHER: "Teacher", ACCOUNTANT: "Accountant" };
 
 export function StaffPage() {
+  useDocumentTitle("Staff");
   const { identity } = useAuth();
   const isOwner = identity?.kind === "STAFF" && identity.role === "OWNER";
   const showToast = useToast();
@@ -103,7 +105,7 @@ export function StaffPage() {
             rowKey={(s) => s.id}
             emptyMessage="No staff yet."
             columns={[
-              { header: "Name", render: (s) => s.name },
+              { header: "Name", primary: true, render: (s) => s.name },
               { header: "Email", render: (s) => s.email },
               { header: "Role", render: (s) => ROLE_LABEL[s.role] },
               { header: "Status", render: (s) => (s.isActive ? "Active" : "Deactivated") },

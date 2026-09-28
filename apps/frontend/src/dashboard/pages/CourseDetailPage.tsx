@@ -7,6 +7,7 @@ import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 import { FormField, Select } from "../../components/FormField";
 import { useToast } from "../../components/ToastContext";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -48,6 +49,7 @@ export function CourseDetailPage() {
     }
     return { course, candidates };
   }, [id]);
+  useDocumentTitle(data?.course.name ?? "Subject");
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -137,7 +139,7 @@ export function CourseDetailPage() {
               />
 
               {isElective && isOwner && candidates.length > 0 && (
-                <form onSubmit={handleAdd} style={{ display: "flex", gap: 10, alignItems: "flex-end", marginTop: 14 }}>
+                <form onSubmit={handleAdd} style={{ display: "flex", gap: 10, alignItems: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
                   <FormField label="Add a student to this elective">
                     <Select value={selected} onChange={(e) => setSelected(e.target.value)}>
                       <option value="">Choose…</option>

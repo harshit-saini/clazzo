@@ -6,6 +6,8 @@ import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
 import { Select } from "../../components/FormField";
 import { InvoiceStatusTag } from "../../components/StatusTag";
+import { FeeSummaryStrip } from "../../components/FeeSummaryStrip";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 
 interface Invoice {
   id: string;
@@ -17,6 +19,7 @@ interface Invoice {
 }
 
 export function FeesPage() {
+  useDocumentTitle("Fees");
   const [status, setStatus] = useState("");
   const { data: invoices, loading, error, reload } = useApiData(
     () => api.get<Invoice[]>(`/api/invoices${status ? `?status=${status}` : ""}`),
@@ -38,18 +41,21 @@ export function FeesPage() {
 
       <AsyncState loading={loading} error={error} data={invoices} onRetry={reload}>
         {(invoices) => (
+          <>
+          <FeeSummaryStrip invoices={invoices} />
           <DataTable
             rows={invoices}
             rowKey={(i) => i.id}
             emptyMessage="No invoices found."
             columns={[
-              { header: "Student", render: (i) => <Link to={`/dashboard/students/${i.student.id}`}>{i.student.name}</Link> },
+              { header: "Student", primary: true, render: (i) => <Link to={`/dashboard/students/${i.student.id}`}>{i.student.name}</Link> },
               { header: "Amount", render: (i) => `₹${i.amount}` },
               { header: "Paid", render: (i) => `₹${i.payments.reduce((s, p) => s + Number(p.amount), 0)}` },
               { header: "Due", render: (i) => new Date(i.dueDate).toLocaleDateString() },
               { header: "Status", render: (i) => <InvoiceStatusTag status={i.status} /> },
             ]}
           />
+          </>
         )}
       </AsyncState>
     </div>

@@ -3,6 +3,7 @@ import { api } from "../../lib/api";
 import { useApiData } from "../../lib/useApiData";
 import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
+import { useDocumentTitle } from "../../lib/useDocumentTitle";
 
 interface CourseRow {
   id: string;
@@ -15,13 +16,14 @@ interface CourseRow {
 }
 
 export function CoursesPage() {
+  useDocumentTitle("Subjects");
   const { data: courses, loading, error, reload } = useApiData(() => api.get<CourseRow[]>("/api/courses"));
 
   return (
     <div>
       <h1 style={{ fontSize: 26, marginBottom: 4 }}>Subjects</h1>
       <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 24 }}>
-        Every subject taught across your organization. Add one from the group that studies it.
+        Every subject taught across your organization. Add one from <Link to="/dashboard/structure">the group that studies it</Link>.
       </p>
 
       <AsyncState loading={loading} error={error} data={courses} onRetry={reload}>
@@ -29,7 +31,7 @@ export function CoursesPage() {
           <DataTable
             rows={courses}
             rowKey={(c) => c.id}
-            emptyMessage="No subjects yet — open a group under Structure and add one."
+            emptyMessage={<>No subjects yet — open a group under <Link to="/dashboard/structure">Structure</Link> and add one.</>}
             columns={[
               { header: "Subject", render: (c) => <Link to={`/dashboard/courses/${c.id}`}>{c.name}</Link> },
               {
