@@ -32,7 +32,17 @@ const createStudentSchema = z.object({
   orgUnitId: z.string().optional(),
 });
 
-const updateStudentSchema = z.object(studentFields).partial();
+// On edit, an empty string means "clear this field" (stored as null), unlike
+// create where it just means "not provided".
+const clearable = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), schema.nullable());
+const updateStudentSchema = z.object({
+  name: studentFields.name.optional(),
+  phone: clearable(z.string().trim().max(120)).optional(),
+  guardianName: clearable(z.string().trim().max(120)).optional(),
+  guardianPhone: clearable(z.string().trim().max(120)).optional(),
+  guardianEmail: clearable(z.string().trim().email().transform((e) => e.toLowerCase())).optional(),
+});
 
 const bulkSchema = z.object({
   orgUnitId: z.string().optional(),

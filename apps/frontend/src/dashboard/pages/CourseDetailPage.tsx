@@ -262,8 +262,8 @@ function EditCourseModal({ course, onClose, onSaved }: { course: CourseDetail; o
     try {
       await api.patch(`/api/courses/${course.id}`, {
         name: name.trim(),
-        // The API can't clear a teacher, so an empty choice is simply not sent.
-        ...(teacherId ? { teacherId } : {}),
+        // An empty choice unassigns the teacher.
+        teacherId: teacherId || null,
       });
       onSaved();
       onClose();
