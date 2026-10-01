@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { MenuIcon } from "../icons";
+import { MenuIcon, SearchIcon, SettingsIcon, XIcon } from "../icons";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { InstallPrompt } from "./InstallPrompt";
+import { GlobalSearch } from "./GlobalSearch";
+import { useMediaQuery, useOnline } from "../lib/useOnline";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+const THEME_KEY = "clazzo_theme";
 
 export interface NavItem {
   to: string;
@@ -14,16 +19,81 @@ export interface NavItem {
   icon?: ReactNode;
 }
 
-export function AppShell({ brand, navItems, extra }: { brand: string; navItems: NavItem[]; extra?: ReactNode }) {
-  const { identity, logout } = useAuth();
+type Theme = "light" | "dark";
+
+export function AppShell({
+  brand,
+  navItems,
+  settingsTo,
+  extra,
+}: {
+  brand: string;
+  navItems: NavItem[];
+  settingsTo: string;
+  extra?: ReactNode;
+}) {
+  const { identity, logout, connectionError } = useAuth();
   const [open, setOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light"));
   const location = useLocation();
+  const online = useOnline();
+  const isMobile = useMediaQuery("(max-width: 860px)");
   const sidebarRef = useRef<HTMLElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const firstRender = useRef(true);
+
+  // The dark theme is scoped to the signed-in app: the marketing site and
+  // auth pages keep their light look, so the attribute only exists while
+  // this shell is mounted.
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+    return () => {
+      delete document.documentElement.dataset.theme;
+    };
+  }, [theme]);
+
+  // Ctrl/⌘+K opens search anywhere in the staff app.
+  const isStaff = identity?.kind === "STAFF";
+  useEffect(() => {
+    if (!isStaff) return;
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearching(true);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isStaff]);
 
   // Close the drawer whenever the route changes, however navigation happened.
   useEffect(() => setOpen(false), [location.pathname]);
+
+  // After a client-side navigation focus would otherwise stay on the link
+  // that was clicked, so a screen reader announces nothing. Move it to the
+  // new page's heading (or the content area as a fallback).
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    const target = mainRef.current?.querySelector<HTMLElement>("h1") ?? mainRef.current;
+    if (!target) return;
+    if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+    target.focus({ preventScroll: true });
+  }, [location.pathname]);
+
+  // On mobile a closed drawer is only slid off-screen, so keep it out of the
+  // tab order and the accessibility tree until it's open.
+  useEffect(() => {
+    const sidebar = sidebarRef.current;
+    if (!sidebar) return;
+    if (isMobile && !open) sidebar.setAttribute("inert", "");
+    else sidebar.removeAttribute("inert");
+  }, [isMobile, open]);
 
   // On mobile the sidebar becomes an off-canvas drawer covering the page —
   // while it's open, trap focus inside it, let Escape close it, and hide
@@ -62,6 +132,8 @@ export function AppShell({ brand, navItems, extra }: { brand: string; navItems: 
     };
   }, [open]);
 
+  const homeTo = navItems[0]?.to ?? "/";
+
   return (
     <div style={{ minHeight: "100vh", display: "flex" }}>
       <a href="#main-content" className="skip-link">
@@ -71,17 +143,18 @@ export function AppShell({ brand, navItems, extra }: { brand: string; navItems: 
         ref={toggleRef}
         type="button"
         className="app-shell-toggle"
-        aria-label="Open menu"
+        aria-label={open ? "Close menu" : "Open menu"}
         aria-expanded={open}
-        onClick={() => setOpen(true)}
+        aria-controls="app-sidebar"
+        onClick={() => setOpen((v) => !v)}
       >
         <MenuIcon size={20} />
       </button>
       <div className={`app-shell-scrim${open ? " show" : ""}`} onClick={() => setOpen(false)} />
 
       <aside
+        id="app-sidebar"
         ref={sidebarRef}
-        role="navigation"
         aria-label="Main"
         className={`app-shell-sidebar${open ? " open" : ""}`}
         style={{
@@ -95,46 +168,56 @@ export function AppShell({ brand, navItems, extra }: { brand: string; navItems: 
           gap: 4,
         }}
       >
-        <div className="nav-brand" style={{ marginBottom: 24, paddingInline: 8 }}>
+        <button type="button" className="app-shell-close" aria-label="Close menu" onClick={() => setOpen(false)}>
+          <XIcon size={18} />
+        </button>
+        <Link to={homeTo} className="nav-brand" style={{ marginBottom: 24, paddingInline: 8, marginRight: 0 }}>
           {brand}
-        </div>
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            style={({ isActive }) => ({
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "9px 12px",
-              borderRadius: "var(--radius-md)",
-              fontSize: 14.5,
-              color: isActive ? "var(--color-bg)" : "var(--color-text)",
-              background: isActive ? "var(--color-accent)" : "transparent",
-              textDecoration: "none",
-            })}
-          >
-            {item.icon}
-            {item.label}
-          </NavLink>
-        ))}
+        </Link>
+        {isStaff && (
+          <button type="button" className="btn btn-secondary btn-sm search-trigger" onClick={() => setSearching(true)}>
+            <span className="row" style={{ gap: 6 }}>
+              <SearchIcon size={15} /> Search
+            </span>
+            <kbd aria-hidden="true">Ctrl K</kbd>
+          </button>
+        )}
+        <nav aria-label="Primary" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {navItems.map((item) => (
+            <NavLink key={item.to} to={item.to} end={item.end} className="side-nav-link">
+              {item.icon}
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
         <div style={{ flex: 1 }} />
         {extra}
         <div style={{ borderTop: "1px solid var(--color-divider)", paddingTop: 12, marginTop: 12 }}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{identity?.name}</div>
-          <div style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 60%, transparent)" }}>
-            {identity?.email}
-          </div>
-          <button type="button" className="btn btn-ghost" style={{ marginTop: 8, marginLeft: -10, fontSize: 13 }} onClick={logout}>
+          <div style={{ fontSize: 12, color: "var(--color-text-muted)", overflowWrap: "anywhere" }}>{identity?.email}</div>
+          <NavLink to={settingsTo} className="side-nav-link" style={{ marginTop: 8, fontSize: 13.5 }}>
+            <SettingsIcon size={16} />
+            Settings
+          </NavLink>
+          <button
+            type="button"
+            className="btn btn-ghost theme-toggle"
+            aria-pressed={theme === "dark"}
+            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+          >
+            {theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          </button>
+          <button type="button" className="btn btn-ghost theme-toggle" onClick={logout}>
             Log out
           </button>
         </div>
       </aside>
-      {/* minWidth:0 lets this flex child shrink below its content's intrinsic
-          width — without it one wide row stretches the column past the viewport
-          and the page's own paragraphs get clipped. */}
-      <main id="main-content" ref={mainRef} className="app-shell-main" style={{ flex: 1, minWidth: 0, padding: "32px 40px", maxWidth: 1100 }}>
+      <main id="main-content" ref={mainRef} className="app-shell-main">
+        {(!online || connectionError) && (
+          <div className="offline-banner" role="status">
+            You're offline — showing what was saved on this device. Changes will work again once you reconnect.
+          </div>
+        )}
         {/* Keyed by route so a crash on one page doesn't leave every later
             page stuck on the same error screen — a fresh key remounts and
             clears the boundary's caught-error state. */}
@@ -142,6 +225,10 @@ export function AppShell({ brand, navItems, extra }: { brand: string; navItems: 
           <Outlet />
         </ErrorBoundary>
       </main>
+      <InstallPrompt />
+      {searching && identity?.kind === "STAFF" && (
+        <GlobalSearch onClose={() => setSearching(false)} canBrowseStructure={identity.role !== "ACCOUNTANT"} />
+      )}
     </div>
   );
 }

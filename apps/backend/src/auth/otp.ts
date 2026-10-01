@@ -1,6 +1,9 @@
 import { randomInt, createHash } from "node:crypto";
 
 export const OTP_TTL_MS = 10 * 60 * 1000;
+// A guardian opening the email hours later is normal; a login code is
+// typed within minutes. Consent codes get a much longer life.
+export const CONSENT_OTP_TTL_MS = 48 * 60 * 60 * 1000;
 export const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 export const MAX_OTP_ATTEMPTS = 5;
 

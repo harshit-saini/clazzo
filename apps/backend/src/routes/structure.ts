@@ -15,7 +15,11 @@ const createUnitSchema = z.object({
 });
 
 const renameUnitSchema = z.object({ name: z.string().min(1) });
-const enrollSchema = z.object({ studentId: z.string() });
+// One student, or many at once — enrolling a class of 30 used to be 30
+// separate round trips.
+const enrollSchema = z
+  .object({ studentId: z.string().optional(), studentIds: z.array(z.string()).min(1).max(500).optional() })
+  .refine((v) => v.studentId || v.studentIds, { message: "studentId or studentIds is required" });
 
 export default async function structureRoutes(fastify: FastifyInstance) {
   fastify.addHook("preHandler", fastify.authenticate);
@@ -238,30 +242,39 @@ export default async function structureRoutes(fastify: FastifyInstance) {
   fastify.post("/units/:id/enroll", { preHandler: fastify.requireOwner }, async (request, reply) => {
     const { id: orgUnitId } = request.params as { id: string };
     const { instituteId } = asStaff(request.user);
-    const { studentId } = enrollSchema.parse(request.body);
+    const body = enrollSchema.parse(request.body);
+    const requested = [...new Set(body.studentIds ?? [body.studentId as string])];
 
-    const [unit, student] = await Promise.all([
-      findOrgUnit(orgUnitId, instituteId),
-      prisma.student.findFirst({ where: { id: studentId, instituteId } }),
-    ]);
-    if (!unit || !student) return reply.code(404).send({ error: "Unit or student not found" });
-
-    const enrollment = await prisma.enrollment.upsert({
-      where: { orgUnitId_studentId: { orgUnitId, studentId } },
-      update: { status: "ACTIVE" },
-      create: { orgUnitId, studentId, status: "ACTIVE" },
+    const unit = await findOrgUnit(orgUnitId, instituteId);
+    const students = await prisma.student.findMany({
+      where: { id: { in: requested }, instituteId },
+      select: { id: true },
     });
+    if (!unit || students.length !== requested.length) {
+      return reply.code(404).send({ error: "Unit or student not found" });
+    }
+
+    const enrollments = await prisma.$transaction(
+      requested.map((studentId) =>
+        prisma.enrollment.upsert({
+          where: { orgUnitId_studentId: { orgUnitId, studentId } },
+          update: { status: "ACTIVE" },
+          create: { orgUnitId, studentId, status: "ACTIVE" },
+        })
+      )
+    );
 
     await logAudit({
       actor: request.user,
       instituteId,
       action: "enrollment.create",
-      entityType: "Enrollment",
-      entityId: enrollment.id,
-      metadata: { studentId, orgUnitId },
+      entityType: "OrgUnit",
+      entityId: orgUnitId,
+      metadata: { studentIds: requested, count: requested.length },
     });
 
-    return reply.code(201).send(enrollment);
+    // Single-student calls keep returning the enrollment itself.
+    return reply.code(201).send(body.studentIds ? { enrolled: enrollments.length } : enrollments[0]);
   });
 
   fastify.delete("/units/:id/enroll/:studentId", { preHandler: fastify.requireOwner }, async (request, reply) => {
