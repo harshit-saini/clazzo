@@ -60,17 +60,35 @@ export async function sendStaffWelcomeEmail(to: string, name: string, instituteN
   });
 }
 
-export async function sendConsentEmail(to: string, code: string, studentName: string, instituteName: string) {
+const escapeHtml = (value: string) =>
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+export async function sendConsentEmail(
+  to: string,
+  code: string,
+  students: { name: string; instituteName: string }[]
+) {
   const confirmUrl = `${frontendUrl}/consent/confirm?email=${encodeURIComponent(to)}`;
+  const list = students
+    .map((s) => `<li><strong>${escapeHtml(s.name)}</strong> at ${escapeHtml(s.instituteName)}</li>`)
+    .join("");
+  const subject =
+    students.length === 1
+      ? `Confirm ${students[0].name}'s Clazzo access at ${students[0].instituteName}`
+      : `Confirm your children's Clazzo access`;
+
   await sendEmail({
     to,
-    subject: `Confirm ${studentName}'s Clazzo access at ${instituteName}`,
+    subject,
     html: `
-      <p>${instituteName} has invited ${studentName} to Clazzo, where they can check attendance, class schedule and fee status.</p>
-      <p>Because you're listed as their guardian, we need your confirmation before this access goes live. Enter this code where prompted:</p>
+      <p>You're listed as the guardian for:</p>
+      <ul>${list}</ul>
+      <p>Their school or coaching centre has set up Clazzo access so the student can see their own attendance, class schedule and fee status. Because you're their guardian, we need your confirmation before that access goes live.</p>
+      <p>Enter this code where prompted:</p>
       <p style="font-size:28px;font-weight:bold;letter-spacing:4px">${code}</p>
-      <p>This code expires in 10 minutes. If you weren't expecting this, you can ignore this email and the access will stay inactive.</p>
+      <p>The code works for 48 hours. If you weren't expecting this, ignore this email and the access stays switched off.</p>
       <p><a href="${confirmUrl}">Confirm access</a></p>
+      <p style="font-size:12px;color:#555">You can withdraw consent at any time from the same page, and request a new code if this one expires. See our <a href="${frontendUrl}/privacy">privacy notice</a> for what is shared and with whom.</p>
     `,
   });
 }

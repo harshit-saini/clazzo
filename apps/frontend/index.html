@@ -3,16 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="Clazzo — the coaching marketplace connecting institutes, teachers and students." />
+    <meta name="description" content="Clazzo — attendance, fees and a student/parent portal for schools, colleges, coaching centres and tutors." />
     <meta name="theme-color" content="#c67139" />
 
-    <!-- iOS ignores the web manifest for install metadata; these are read directly. -->
+    <!-- iOS ignores the web manifest for install metadata; these are read directly.
+         "default" keeps the status-bar text dark: "black-translucent" drew white
+         clock/battery text over the cream page, which was nearly invisible. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Clazzo" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-    <title>Clazzo — The coaching marketplace</title>
+    <!-- Fonts load in parallel with the app instead of behind a CSS @import
+         chain; display=swap shows text immediately in the fallback face. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Caprasimo:wght@400&family=Figtree:wght@400;600;700&display=swap"
+    />
+
+    <title>Clazzo — Attendance, fees and a parent portal for your institute</title>
   </head>
   <body>
     <div id="root"></div>

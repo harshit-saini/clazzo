@@ -69,15 +69,24 @@ model User {
 /// stored here — verification re-resolves the email to whichever account
 /// owns it — so this table only ever needs to know the email and the code.
 model OtpCode {
-  id         String    @id @default(cuid())
+  id         String     @id @default(cuid())
   email      String
+  /// Login codes and guardian-consent codes share this table. Without a
+  /// purpose, issuing either one invalidated the other for the same email.
+  purpose    OtpPurpose @default(LOGIN)
   codeHash   String
   expiresAt  DateTime
   consumedAt DateTime?
-  attempts   Int       @default(0)
-  createdAt  DateTime  @default(now())
+  attempts   Int        @default(0)
+  createdAt  DateTime   @default(now())
 
   @@index([email])
+  @@index([email, purpose])
+}
+
+enum OtpPurpose {
+  LOGIN
+  CONSENT
 }
 
 // ─── Audit ──────────────────────────────────────────────────────────────
@@ -210,6 +219,11 @@ model StudentAccount {
   name      String
   email     String   @unique
   createdAt DateTime @default(now())
+  /// Declared at self-signup. A minor must name a guardian, and that
+  /// guardian's consent is then required for every institute that later
+  /// invites this account — even if staff didn't enter a guardian email.
+  isMinor       Boolean @default(false)
+  guardianEmail String?
 
   memberships Student[]
 }
@@ -218,6 +232,9 @@ enum ConsentStatus {
   NOT_REQUIRED
   PENDING
   CONFIRMED
+  /// A guardian withdrew a previously confirmed consent. Treated like
+  /// PENDING by the portal (no access) until they confirm again.
+  REVOKED
 }
 
 /// A student's membership at one institute — their roster entry there:
@@ -253,6 +270,10 @@ model Student {
   // relying on it.
   consentStatus      ConsentStatus @default(NOT_REQUIRED)
   consentConfirmedAt DateTime?
+  consentRevokedAt   DateTime?
+  /// Set when the student/guardian said at signup or invite that the
+  /// student is under 18, so a guardian email becomes mandatory.
+  isMinor            Boolean       @default(false)
 
   enrollments       Enrollment[]
   courseEnrollments CourseEnrollment[]
@@ -402,6 +423,8 @@ enum InvoiceStatus {
   PARTIAL
   PAID
   OVERDUE
+  /// Voided by staff (raised in error, waived). Excluded from dues.
+  CANCELLED
 }
 
 /// A specific amount owed by a specific student, independent of the fee
@@ -416,12 +439,16 @@ model FeeInvoice {
   dueDate   DateTime
   status    InvoiceStatus @default(PENDING)
   notes     String?
+  /// "YYYY-MM" for invoices produced by bulk generation, so re-running the
+  /// same month can skip students who already have one. Null for one-offs.
+  period    String?
   createdAt DateTime      @default(now())
 
   payments FeePayment[]
 
   @@index([studentId])
   @@index([status])
+  @@index([orgUnitId, period])
 }
 
 enum PaymentMethod {

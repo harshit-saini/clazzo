@@ -52,6 +52,43 @@ export default async function staffRoutes(fastify: FastifyInstance) {
     return reply.code(201).send(staff);
   });
 
+  // Change a colleague's role (e.g. promote a teacher to accountant). An
+  // owner can't demote themselves, so the institute can never end up with no
+  // one able to manage it.
+  fastify.patch("/:id", { preHandler: fastify.requireOwner }, async (request, reply) => {
+    const me = asStaff(request.user);
+    const { id } = request.params as { id: string };
+    const body = z
+      .object({
+        name: z.string().trim().min(1).max(120).optional(),
+        role: z.enum(["OWNER", "TEACHER", "ACCOUNTANT"]).optional(),
+      })
+      .parse(request.body);
+
+    const staff = await prisma.user.findFirst({ where: { id, instituteId: me.instituteId } });
+    if (!staff) return reply.code(404).send({ error: "Not found" });
+    if (body.role && body.role !== staff.role && id === me.userId) {
+      return reply.code(400).send({ error: "You can't change your own role" });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: body,
+      select: { id: true, name: true, email: true, role: true, isActive: true },
+    });
+
+    await logAudit({
+      actor: me,
+      instituteId: me.instituteId,
+      action: "staff.update",
+      entityType: "User",
+      entityId: id,
+      metadata: body,
+    });
+
+    return updated;
+  });
+
   fastify.patch("/:id/deactivate", { preHandler: fastify.requireOwner }, async (request, reply) => {
     const me = asStaff(request.user);
     const { id } = request.params as { id: string };

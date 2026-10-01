@@ -51,11 +51,11 @@ export function InstituteDetailPage() {
     <AsyncState loading={loading} error={error} data={detail} onRetry={reload} backTo="/portal" backLabel="Back to institutes">
       {(detail) => (
         <div>
-          <p style={{ fontSize: 13, color: "color-mix(in srgb, var(--color-text) 60%, transparent)", marginBottom: 2 }}>
+          <p style={{ fontSize: 13, color: "var(--color-text-muted)", marginBottom: 2 }}>
             <Link to="/portal">My institutes</Link>
           </p>
           <h1 style={{ fontSize: 26, marginBottom: 4 }}>{detail.institute.name}</h1>
-          <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 28 }}>
+          <p style={{ color: "var(--color-text-muted)", marginBottom: 28 }}>
             {detail.groups.map((g) => g.breadcrumb.join(" › ")).join(", ") || "Not placed in a group yet"}
           </p>
 
@@ -71,13 +71,13 @@ export function InstituteDetailPage() {
                     {pct !== null && (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                         <AttendanceTag pct={pct} />
-                        <span style={{ fontSize: 11.5, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>
+                        <span style={{ fontSize: 11.5, color: "var(--color-text-muted)" }}>
                           ({c.attendance.present}/{c.attendance.total})
                         </span>
                       </span>
                     )}
                   </div>
-                  <p style={{ fontSize: 13.5, margin: 0, color: "color-mix(in srgb, var(--color-text) 65%, transparent)" }}>
+                  <p style={{ fontSize: 13.5, margin: 0, color: "var(--color-text-muted)" }}>
                     {c.teacher?.name ?? "No teacher assigned"} · {c.group.name}
                   </p>
                   {c.schedule.length > 0 && (
@@ -105,7 +105,7 @@ export function InstituteDetailPage() {
                 <div key={inv.id} className="card" style={{ padding: "14px 18px", flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontSize: 14.5 }}>₹{inv.amount}</div>
-                    <div style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 60%, transparent)" }}>
+                    <div style={{ fontSize: 12.5, color: "var(--color-text-muted)" }}>
                       Due {new Date(inv.dueDate).toLocaleDateString()} · Paid ₹{paid}
                     </div>
                   </div>

@@ -97,7 +97,7 @@ export function UnitDetailPage() {
 
         return (
           <div>
-            <p style={{ fontSize: 13, color: "color-mix(in srgb, var(--color-text) 60%, transparent)", marginBottom: 2 }}>
+            <p style={{ fontSize: 13, color: "var(--color-text-muted)", marginBottom: 2 }}>
               <Link to="/dashboard/structure">Structure</Link>
               {unit.ancestors.map((a) => (
                 <span key={a.id}>
@@ -107,7 +107,7 @@ export function UnitDetailPage() {
               ))}
             </p>
             <h1 style={{ fontSize: 26, marginBottom: 4 }}>{unit.name}</h1>
-            <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 28 }}>
+            <p style={{ color: "var(--color-text-muted)", marginBottom: 28 }}>
               {unit.level?.name ?? "Group"} · {unit.roster.length} student{unit.roster.length === 1 ? "" : "s"}
             </p>
 
@@ -205,7 +205,7 @@ function CoursesSection({
               <>
                 <Link to={`/dashboard/courses/${c.id}`}>{c.name}</Link>
                 {c.inherited && (
-                  <span style={{ fontSize: 11, marginLeft: 8, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>
+                  <span style={{ fontSize: 11, marginLeft: 8, color: "var(--color-text-muted)" }}>
                     from {c.orgUnit.name}
                   </span>
                 )}

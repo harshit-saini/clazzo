@@ -18,6 +18,7 @@ import { FeesPage } from "./dashboard/pages/FeesPage";
 import { StaffPage } from "./dashboard/pages/StaffPage";
 import { CoursesPage } from "./dashboard/pages/CoursesPage";
 import { CourseDetailPage } from "./dashboard/pages/CourseDetailPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { PortalLayout } from "./portal/PortalLayout";
 import { PortalHome } from "./portal/pages/PortalHome";
 import { InstituteDetailPage } from "./portal/pages/InstituteDetailPage";
@@ -46,12 +47,14 @@ export default function App() {
               <Route path="attendance/:sessionId" element={<AttendanceMarkPage />} />
               <Route path="fees" element={<FeesPage />} />
               <Route path="staff" element={<StaffPage />} />
+              <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Route>
 
           <Route element={<RequireAuth kind="STUDENT" />}>
             <Route path="/portal" element={<PortalLayout />}>
               <Route index element={<PortalHome />} />
+              <Route path="settings" element={<SettingsPage />} />
               <Route path="institutes/:instituteId" element={<InstituteDetailPage />} />
               <Route path="institutes/:instituteId/attendance" element={<AttendanceHistoryPage />} />
             </Route>

@@ -18,7 +18,7 @@ export function PortalHome() {
   return (
     <div>
       <h1 style={{ fontSize: 26, marginBottom: 6 }}>My institutes</h1>
-      <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 24 }}>
+      <p style={{ color: "var(--color-text-muted)", marginBottom: 24 }}>
         Every school and coaching center you're enrolled in.
       </p>
 
@@ -52,7 +52,7 @@ export function PortalHome() {
                       Waiting on your guardian to confirm access
                     </p>
                   ) : (
-                    <p style={{ fontSize: 13, margin: "8px 0 0", color: "color-mix(in srgb, var(--color-text) 65%, transparent)" }}>
+                    <p style={{ fontSize: 13, margin: "8px 0 0", color: "var(--color-text-muted)" }}>
                       {m.activeCourseCount} subject{m.activeCourseCount === 1 ? "" : "s"}
                     </p>
                   )}

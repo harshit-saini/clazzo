@@ -3,7 +3,13 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function Modal({ title, onClose, children, actions, busy }: {
+/**
+ * Every dialog has the same footer: Cancel first, primary action last, on
+ * the right. Form dialogs put their submit button in `actions` with a
+ * `form="…"` attribute pointing at the form's id, rather than a full-width
+ * button inside the body with a lone "Close" stranded underneath.
+ */
+export function Modal({ title, onClose, children, actions, busy, cancelLabel = "Cancel", wide }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
@@ -11,6 +17,9 @@ export function Modal({ title, onClose, children, actions, busy }: {
   /** While true, the dialog can't be dismissed via backdrop click or Escape
    * — a request is in flight and closing now would hide its outcome. */
   busy?: boolean;
+  /** "Close" for dialogs with nothing to cancel; "Cancel" otherwise. */
+  cancelLabel?: string;
+  wide?: boolean;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -18,6 +27,7 @@ export function Modal({ title, onClose, children, actions, busy }: {
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const dialog = dialogRef.current;
+    // Prefer the first field over the header controls when there is one.
     const focusable = dialog?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
     (focusable?.[0] ?? dialog)?.focus();
 
@@ -51,7 +61,7 @@ export function Modal({ title, onClose, children, actions, busy }: {
     <div className="dialog-backdrop" onClick={() => !busy && onClose()}>
       <div
         ref={dialogRef}
-        className="dialog"
+        className={`dialog${wide ? " dialog-wide" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -61,10 +71,10 @@ export function Modal({ title, onClose, children, actions, busy }: {
         <div className="dialog-title" id={titleId}>{title}</div>
         <div className="dialog-body">{children}</div>
         <div className="dialog-actions">
-          {actions}
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>
-            Close
+            {cancelLabel}
           </button>
+          {actions}
         </div>
       </div>
     </div>

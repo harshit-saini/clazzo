@@ -16,26 +16,26 @@ export const ORG_TEMPLATES: OrgTemplate[] = [
   {
     type: "SCHOOL",
     label: "School",
-    optionLabel: "A school — centers, classes and sections",
-    levels: ["Center", "Class", "Section"],
+    optionLabel: "A school — classes and sections",
+    levels: ["Class", "Section"],
     description:
-      "A center is a physical location. Each center runs classes (e.g. Class 7), and each class splits into sections (e.g. Section A). Subjects can be shared across a whole class or set per section — so 12A can study Science while 12B studies Commerce.",
+      "Each class (e.g. Class 7) splits into sections (e.g. Section A). Subjects can be shared across a whole class or set per section — so 12A can study Science while 12B studies Commerce. Run more than one campus? Insert a “Campus” level above Class.",
   },
   {
     type: "COLLEGE",
     label: "College",
-    optionLabel: "A college — centers, degrees and batches",
-    levels: ["Center", "Degree", "Batch", "Specialization"],
+    optionLabel: "A college — centres, degrees and batches",
+    levels: ["Centre", "Degree", "Batch", "Specialization"],
     description:
-      "A center is a campus. Each center offers degrees (e.g. B.Tech), each degree admits batches by year (e.g. 2024), and each batch splits into specializations or branches (e.g. Mechanical, Computer Science).",
+      "A centre is a campus. Each centre offers degrees (e.g. B.Tech), each degree admits batches by year (e.g. 2024), and each batch splits into specializations or branches (e.g. Mechanical, Computer Science).",
   },
   {
     type: "COACHING",
     label: "Coaching institute",
-    optionLabel: "A coaching institute — centers and batches",
-    levels: ["Center", "Batch"],
+    optionLabel: "A coaching institute — centres and batches",
+    levels: ["Centre", "Batch"],
     description:
-      "A center is a branch location. Each center runs its own batches (e.g. Class 11 Morning Batch) that students enroll into directly.",
+      "A centre is a branch location. Each centre runs its own batches (e.g. Class 11 Morning Batch) that students enrol into directly.",
   },
   {
     type: "TUTOR",
