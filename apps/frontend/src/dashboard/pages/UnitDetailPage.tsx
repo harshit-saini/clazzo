@@ -834,12 +834,11 @@ function SubjectsSection({ unit, canManage, onChanged }: { unit: UnitDetail; can
   const teachers = (staff.data ?? []).filter((m) => m.isActive && (m.role === "TEACHER" || m.role === "OWNER"));
 
   async function changeTeacher(course: CourseRow, teacherId: string) {
-    if (!teacherId) return;
     setSavingId(course.id);
     try {
-      await api.patch(`/api/courses/${course.id}`, { teacherId });
+      await api.patch(`/api/courses/${course.id}`, { teacherId: teacherId || null });
       const name = teachers.find((t) => t.id === teacherId)?.name ?? "the teacher";
-      showToast(`${name} now teaches ${course.name}.`);
+      showToast(teacherId ? `${name} now teaches ${course.name}.` : `${course.name} has no teacher now.`);
       onChanged();
     } catch (err) {
       showToast(errorMessage(err, "Could not change the teacher. Please try again."), "error");
@@ -913,10 +912,7 @@ function SubjectsSection({ unit, canManage, onChanged }: { unit: UnitDetail; can
                     onChange={(e) => changeTeacher(c, e.target.value)}
                     style={{ minWidth: 160 }}
                   >
-                    {/* The API can't clear a teacher, only replace one. */}
-                    <option value="" disabled>
-                      Unassigned
-                    </option>
+                    <option value="">Unassigned</option>
                     {teachers.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}

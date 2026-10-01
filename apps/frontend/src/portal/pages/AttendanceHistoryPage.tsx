@@ -58,8 +58,11 @@ export function AttendanceHistoryPage() {
   // Only used for the breadcrumb/title and the masked guardian email; a
   // failure here must not block the history itself.
   const { data: institute } = useApiData(
-    () => api.get<{ institute: { name: string }; maskedGuardianEmail?: string | null; consentStatus: string }>(`/api/student/institutes/${instituteId}`),
-    [instituteId]
+    () =>
+      api.get<{ institute: { name: string }; maskedGuardianEmail?: string | null; consentStatus: string }>(
+        `/api/student/institutes/${instituteId}`,
+      ),
+    [instituteId],
   );
   const instituteName = institute?.institute.name ?? "Institute";
   useDocumentTitle(`Attendance history · ${instituteName}`);
@@ -96,42 +99,42 @@ export function AttendanceHistoryPage() {
       />
 
       {!pendingOnly && (
-      <div className="inline-form" style={{ marginTop: 0, marginBottom: 16 }}>
-        <FormField label="Subject">
-          <Select value={courseId} onChange={(e) => changeFilter(() => setCourseId(e.target.value))}>
-            <option value="">All subjects</option>
-            {subjects.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
-        </FormField>
-        <FormField label="Month">
-          <TextInput
-            type="month"
-            value={month}
-            placeholder="YYYY-MM"
-            pattern="\d{4}-(0[1-9]|1[0-2])"
-            onChange={(e) => changeFilter(() => setMonth(e.target.value))}
-          />
-        </FormField>
-        {filtered && (
-          <button
-            type="button"
-            className="btn btn-ghost"
-            style={{ marginBottom: 14 }}
-            onClick={() =>
-              changeFilter(() => {
-                setCourseId("");
-                setMonth("");
-              })
-            }
-          >
-            Clear filters
-          </button>
-        )}
-      </div>
+        <div className="inline-form" style={{ marginTop: 0, marginBottom: 16 }}>
+          <FormField label="Subject">
+            <Select value={courseId} onChange={(e) => changeFilter(() => setCourseId(e.target.value))}>
+              <option value="">All subjects</option>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField label="Month">
+            <TextInput
+              type="month"
+              value={month}
+              placeholder="YYYY-MM"
+              pattern="\d{4}-(0[1-9]|1[0-2])"
+              onChange={(e) => changeFilter(() => setMonth(e.target.value))}
+            />
+          </FormField>
+          {filtered && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ marginBottom: 14 }}
+              onClick={() =>
+                changeFilter(() => {
+                  setCourseId("");
+                  setMonth("");
+                })
+              }
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
       )}
 
       <AsyncState loading={loading} error={error} data={data} onRetry={reload} backTo={backTo} backLabel="Back">
@@ -177,10 +180,20 @@ export function AttendanceHistoryPage() {
                     Showing {from}–{to} of {total}
                   </span>
                   <div className="row">
-                    <button type="button" className="btn btn-secondary btn-sm" disabled={skip === 0} onClick={() => setSkip(Math.max(0, skip - PAGE_SIZE))}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      disabled={skip === 0}
+                      onClick={() => setSkip(Math.max(0, skip - PAGE_SIZE))}
+                    >
                       Previous
                     </button>
-                    <button type="button" className="btn btn-secondary btn-sm" disabled={skip + PAGE_SIZE >= total} onClick={() => setSkip(skip + PAGE_SIZE)}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      disabled={skip + PAGE_SIZE >= total}
+                      onClick={() => setSkip(skip + PAGE_SIZE)}
+                    >
                       Next
                     </button>
                   </div>
