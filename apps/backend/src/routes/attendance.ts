@@ -3,7 +3,8 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { asStaff } from "../auth/identity.js";
 import { logAudit } from "../lib/audit.js";
-import { rosterForSession, studentIdsVisibleToTeacher } from "../lib/orgStructure.js";
+import { findOrgUnit, rosterForSession, studentIdsVisibleToTeacher } from "../lib/orgStructure.js";
+import { toDateOnly } from "../lib/dates.js";
 
 const markAttendanceSchema = z.object({
   records: z
@@ -167,5 +168,126 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     ]);
 
     return { items, total };
+  });
+
+  // Roll-up of one student's attendance for the staff profile page: overall
+  // %, per-subject %, so a teacher chasing an absence sees the pattern
+  // without paging through every session. LATE counts as present, matching
+  // the student portal. Same visibility rules as the history above, and an
+  // ACCOUNTANT has no attendance role.
+  fastify.get("/students/:studentId/attendance-summary", async (request, reply) => {
+    const { studentId } = request.params as { studentId: string };
+    const staff = asStaff(request.user);
+    if (staff.role === "ACCOUNTANT") return reply.code(403).send({ error: "Not allowed" });
+
+    const student = await prisma.student.findFirst({ where: { id: studentId, instituteId: staff.instituteId } });
+    if (!student) return reply.code(404).send({ error: "Not found" });
+
+    if (staff.role === "TEACHER") {
+      const visibleIds = await studentIdsVisibleToTeacher(staff.userId, staff.instituteId);
+      if (!visibleIds.has(studentId)) return reply.code(404).send({ error: "Not found" });
+    }
+
+    const rows = await prisma.attendance.findMany({
+      where: { studentId, classSession: { status: { not: "CANCELLED" } } },
+      select: {
+        status: true,
+        classSession: { select: { course: { select: { id: true, name: true } } } },
+      },
+    });
+
+    const bySubject = new Map<string, { name: string; present: number; total: number }>();
+    let present = 0;
+    for (const row of rows) {
+      const isPresent = row.status === "PRESENT" || row.status === "LATE";
+      if (isPresent) present += 1;
+      const key = row.classSession.course?.id ?? "__group__";
+      const entry = bySubject.get(key) ?? { name: row.classSession.course?.name ?? "Whole group", present: 0, total: 0 };
+      entry.total += 1;
+      if (isPresent) entry.present += 1;
+      bySubject.set(key, entry);
+    }
+
+    return {
+      overall: { present, total: rows.length, percent: rows.length ? Math.round((present / rows.length) * 100) : null },
+      subjects: [...bySubject.values()].map((e) => ({
+        ...e,
+        percent: e.total ? Math.round((e.present / e.total) * 100) : null,
+      })),
+    };
+  });
+
+  // How a group (and everything inside it) has been attending: a week-by-week
+  // trend plus the students who need a conversation. A TEACHER is limited to
+  // sessions of subjects they teach; homeroom sessions are owner-only, as in
+  // staffCanAccessSession. An ACCOUNTANT has no attendance role.
+  fastify.get("/units/:unitId/attendance-summary", async (request, reply) => {
+    const { unitId } = request.params as { unitId: string };
+    const staff = asStaff(request.user);
+    if (staff.role === "ACCOUNTANT") return reply.code(403).send({ error: "Not allowed" });
+
+    const unit = await findOrgUnit(unitId, staff.instituteId);
+    if (!unit) return reply.code(404).send({ error: "Not found" });
+
+    const { from, to } = request.query as { from?: string; to?: string };
+    const end = to ? toDateOnly(new Date(to)) : toDateOnly(new Date());
+    const start = from ? toDateOnly(new Date(from)) : new Date(end.getTime() - 55 * 24 * 60 * 60 * 1000);
+
+    const rows = await prisma.attendance.findMany({
+      where: {
+        classSession: {
+          status: { not: "CANCELLED" },
+          date: { gte: start, lte: end },
+          orgUnit: { instituteId: staff.instituteId, path: { startsWith: unit.path } },
+          ...(staff.role === "TEACHER" ? { course: { teacherId: staff.userId } } : {}),
+        },
+      },
+      select: {
+        status: true,
+        studentId: true,
+        student: { select: { name: true } },
+        classSession: { select: { date: true } },
+      },
+    });
+
+    const weekStart = (d: Date) => {
+      const day = d.getUTCDay();
+      const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((day + 6) % 7)));
+      return monday.toISOString().slice(0, 10);
+    };
+
+    const weeks = new Map<string, { present: number; total: number }>();
+    const students = new Map<string, { name: string; present: number; total: number }>();
+    let present = 0;
+    for (const row of rows) {
+      const isPresent = row.status === "PRESENT" || row.status === "LATE";
+      if (isPresent) present += 1;
+
+      const w = weeks.get(weekStart(row.classSession.date)) ?? { present: 0, total: 0 };
+      w.total += 1;
+      if (isPresent) w.present += 1;
+      weeks.set(weekStart(row.classSession.date), w);
+
+      const s = students.get(row.studentId) ?? { name: row.student.name, present: 0, total: 0 };
+      s.total += 1;
+      if (isPresent) s.present += 1;
+      students.set(row.studentId, s);
+    }
+
+    const pct = (p: number, t: number) => (t ? Math.round((p / t) * 100) : null);
+
+    return {
+      from: start,
+      to: end,
+      overall: { present, total: rows.length, percent: pct(present, rows.length) },
+      weeks: [...weeks.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([weekOf, w]) => ({ weekOf, ...w, percent: pct(w.present, w.total) })),
+      lowest: [...students.entries()]
+        .map(([id, s]) => ({ studentId: id, ...s, percent: pct(s.present, s.total) }))
+        .filter((s) => s.total >= 3)
+        .sort((a, b) => (a.percent ?? 100) - (b.percent ?? 100))
+        .slice(0, 5),
+    };
   });
 }

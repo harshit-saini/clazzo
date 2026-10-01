@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
  * line of muted text. */
 export function EmptyState({ title, action }: { title: ReactNode; action?: ReactNode }) {
   return (
-    <div className="card" style={{ padding: 28, alignItems: "center", textAlign: "center", gap: 12, color: "var(--color-neutral-600)" }}>
+    <div className="card" style={{ padding: 28, alignItems: "center", textAlign: "center", gap: 12, color: "var(--color-text-muted)" }}>
       <p style={{ margin: 0 }}>{title}</p>
       {action}
     </div>

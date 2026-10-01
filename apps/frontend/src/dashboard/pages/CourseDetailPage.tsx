@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { api, ApiError } from "../../lib/api";
+import { api, ApiError, fieldErrors } from "../../lib/api";
 import { useApiData } from "../../lib/useApiData";
+import { WEEKDAYS, formatTimeRange } from "../../lib/format";
 import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
-import { FormField, Select } from "../../components/FormField";
+import { EmptyState } from "../../components/EmptyState";
+import { ConfirmModal } from "../../components/ConfirmModal";
+import { Modal } from "../../components/Modal";
+import { FormField, Select, TextInput } from "../../components/FormField";
+import { PageHeader, SectionHeader } from "../../components/PageHeader";
 import { useToast } from "../../components/ToastContext";
 import { useDocumentTitle } from "../../lib/useDocumentTitle";
-
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 interface CourseDetail {
   id: string;
@@ -35,12 +38,14 @@ export function CourseDetailPage() {
   const [selected, setSelected] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
 
   const { data, loading, error: loadError, reload } = useApiData<CoursePageData>(async () => {
     const course = await api.get<CourseDetail>(`/api/courses/${id}`);
     // Electives are picked from the group that studies the subject.
     let candidates: { id: string; name: string }[] = [];
-    if (course.enrollmentMode === "SELECTED") {
+    if (course.enrollmentMode === "SELECTED" && isOwner) {
       const inGroup = await api.get<{ items: { id: string; name: string }[] }>(
         `/api/students?orgUnitId=${course.orgUnit.id}&take=500`
       );
@@ -68,13 +73,19 @@ export function CourseDetailPage() {
     }
   }
 
-  async function handleRemove(studentId: string, name: string) {
+  async function handleRemoveConfirmed() {
+    if (!removeTarget) return;
+    setBusy(true);
     try {
-      await api.delete(`/api/courses/${id}/enroll/${studentId}`);
+      await api.delete(`/api/courses/${id}/enroll/${removeTarget.id}`);
+      showToast(`${removeTarget.name} removed.`);
+      setRemoveTarget(null);
       reload();
-      showToast(`${name} removed.`);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not remove student.", "error");
+      setRemoveTarget(null);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -85,64 +96,110 @@ export function CourseDetailPage() {
 
         return (
           <div>
-            <p style={{ fontSize: 13, color: "color-mix(in srgb, var(--color-text) 60%, transparent)", marginBottom: 2 }}>
-              <Link to="/dashboard/courses">Subjects</Link>
-              {" › "}
-              <Link to={`/dashboard/structure/${course.orgUnit.id}`}>{course.orgUnit.name}</Link>
-            </p>
-            <h1 style={{ fontSize: 26, marginBottom: 4 }}>{course.name}</h1>
-            <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 28 }}>
-              {course.teacher?.name ?? "No teacher assigned"} ·{" "}
-              {isElective ? "Elective — selected students only" : `Taught to everyone in ${course.orgUnit.name}`}
-            </p>
+            <PageHeader
+              breadcrumbs={[
+                { label: "Subjects", to: "/dashboard/courses" },
+                { label: course.orgUnit.name, to: `/dashboard/structure/${course.orgUnit.id}` },
+                { label: course.name },
+              ]}
+              title={course.name}
+              subtitle={
+                <>
+                  {course.teacher ? `Taught by ${course.teacher.name}` : "No teacher assigned"} ·{" "}
+                  {isElective ? "Elective — selected students only" : "Taught to everyone in "}
+                  {!isElective && <Link to={`/dashboard/structure/${course.orgUnit.id}`}>{course.orgUnit.name}</Link>}
+                </>
+              }
+              actions={
+                isOwner && (
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowEdit(true)}>
+                    Edit subject
+                  </button>
+                )
+              }
+            />
 
-            <section style={{ marginBottom: 32 }}>
-              <h2 style={{ fontSize: 18, marginBottom: 10 }}>Weekly schedule</h2>
-              <DataTable
-                rows={course.scheduleSlots}
-                rowKey={(s) => s.id}
-                emptyMessage="Not timetabled yet — add a slot from the group's page."
-                columns={[
-                  { header: "Day", render: (s) => DAYS[s.dayOfWeek] },
-                  { header: "Time", render: (s) => `${s.startTime} – ${s.endTime}` },
-                ]}
-              />
+            <section style={{ marginBottom: 32 }} aria-labelledby="schedule-heading">
+              <SectionHeader title={<span id="schedule-heading">Weekly schedule</span>} />
+              {course.scheduleSlots.length === 0 ? (
+                <EmptyState
+                  title="Not timetabled yet."
+                  action={
+                    isOwner && (
+                      <Link to={`/dashboard/structure/${course.orgUnit.id}`} className="btn btn-secondary btn-sm">
+                        Add a slot on {course.orgUnit.name}
+                      </Link>
+                    )
+                  }
+                />
+              ) : (
+                <DataTable
+                  caption={`Weekly schedule for ${course.name}`}
+                  rows={course.scheduleSlots}
+                  rowKey={(s) => s.id}
+                  columns={[
+                    { header: "Day", primary: true, render: (s) => WEEKDAYS[s.dayOfWeek] },
+                    { header: "Time", render: (s) => formatTimeRange(s.startTime, s.endTime) },
+                  ]}
+                />
+              )}
             </section>
 
-            <section>
-              <h2 style={{ fontSize: 18, marginBottom: 10 }}>Students taking this</h2>
-              <DataTable
-                rows={course.roster}
-                rowKey={(s) => s.id}
-                emptyMessage={isElective ? "Nobody has opted in yet." : "Nobody in this group yet."}
-                columns={[
-                  { header: "Name", render: (s) => <Link to={`/dashboard/students/${s.id}`}>{s.name}</Link> },
-                  { header: "Phone", render: (s) => s.phone ?? "—" },
-                  ...(isElective && isOwner
-                    ? [
-                        {
-                          header: "",
-                          render: (s: { id: string; name: string }) => (
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              style={{ fontSize: 13 }}
-                              onClick={() => handleRemove(s.id, s.name)}
-                            >
-                              Remove
-                            </button>
-                          ),
-                        },
-                      ]
-                    : []),
-                ]}
+            <section aria-labelledby="students-heading">
+              <SectionHeader
+                title={<span id="students-heading">Students taking this ({course.roster.length})</span>}
               />
+              {course.roster.length === 0 ? (
+                <EmptyState
+                  title={isElective ? "Nobody has opted in yet." : `Nobody in ${course.orgUnit.name} yet.`}
+                  action={
+                    isOwner && !isElective ? (
+                      <Link to={`/dashboard/structure/${course.orgUnit.id}`} className="btn btn-secondary btn-sm">
+                        Add students to {course.orgUnit.name}
+                      </Link>
+                    ) : undefined
+                  }
+                />
+              ) : (
+                <DataTable
+                  caption={`Students taking ${course.name}`}
+                  rows={course.roster}
+                  rowKey={(s) => s.id}
+                  columns={[
+                    {
+                      header: "Name",
+                      primary: true,
+                      sortValue: (s) => s.name,
+                      render: (s) => <Link to={`/dashboard/students/${s.id}`}>{s.name}</Link>,
+                    },
+                    { header: "Phone", render: (s) => (s.phone ? <a href={`tel:${s.phone}`}>{s.phone}</a> : "—") },
+                    ...(isElective && isOwner
+                      ? [
+                          {
+                            header: "",
+                            srHeader: "Actions",
+                            render: (s: { id: string; name: string }) => (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm btn-ghost-danger"
+                                aria-label={`Remove ${s.name} from ${course.name}`}
+                                onClick={() => setRemoveTarget(s)}
+                              >
+                                Remove
+                              </button>
+                            ),
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              )}
 
-              {isElective && isOwner && candidates.length > 0 && (
-                <form onSubmit={handleAdd} style={{ display: "flex", gap: 10, alignItems: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
+              {isElective && isOwner && (
+                <form onSubmit={handleAdd} className="inline-form">
                   <FormField label="Add a student to this elective">
-                    <Select value={selected} onChange={(e) => setSelected(e.target.value)}>
-                      <option value="">Choose…</option>
+                    <Select value={selected} onChange={(e) => setSelected(e.target.value)} disabled={candidates.length === 0}>
+                      <option value="">{candidates.length === 0 ? `Everyone in ${course.orgUnit.name} has opted in` : "Choose…"}</option>
                       {candidates.map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.name}
@@ -150,16 +207,107 @@ export function CourseDetailPage() {
                       ))}
                     </Select>
                   </FormField>
-                  <button type="submit" className="btn btn-primary" style={{ height: 36 }} disabled={!selected || busy}>
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={!selected || busy}>
                     {busy ? "Adding…" : "Add"}
                   </button>
                 </form>
               )}
-              {error && <p style={{ color: "var(--color-danger)", fontSize: 13 }}>{error}</p>}
+              {error && <p className="form-error" role="alert">{error}</p>}
             </section>
+
+            {showEdit && <EditCourseModal course={course} onClose={() => setShowEdit(false)} onSaved={reload} />}
+            {removeTarget && (
+              <ConfirmModal
+                title={`Remove ${removeTarget.name}?`}
+                confirmLabel="Remove"
+                variant="danger"
+                busy={busy}
+                onClose={() => setRemoveTarget(null)}
+                onConfirm={handleRemoveConfirmed}
+                body={`${removeTarget.name} will no longer be on ${course.name}'s roster or its attendance sheets. You can add them back later.`}
+              />
+            )}
           </div>
         );
       }}
     </AsyncState>
+  );
+}
+
+interface StaffMember {
+  id: string;
+  name: string;
+  role: "OWNER" | "TEACHER" | "ACCOUNTANT";
+  isActive: boolean;
+}
+
+function EditCourseModal({ course, onClose, onSaved }: { course: CourseDetail; onClose: () => void; onSaved: () => void }) {
+  const showToast = useToast();
+  const [name, setName] = useState(course.name);
+  const [teacherId, setTeacherId] = useState(course.teacher?.id ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+
+  const { data: staff } = useApiData<StaffMember[]>(() => api.get<StaffMember[]>("/api/staff"));
+  // Teachers only — but never hide the current assignee, even if their role
+  // or status has since changed, or the select would show a blank value.
+  const teachers = (staff ?? []).filter((s) => (s.role === "TEACHER" && s.isActive) || s.id === course.teacher?.id);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setFields({});
+    setBusy(true);
+    try {
+      await api.patch(`/api/courses/${course.id}`, {
+        name: name.trim(),
+        // An empty choice unassigns the teacher.
+        teacherId: teacherId || null,
+      });
+      onSaved();
+      onClose();
+      showToast("Subject updated.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save changes.");
+      if (err instanceof ApiError) setFields(fieldErrors(err.issues));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title="Edit subject"
+      onClose={onClose}
+      busy={busy}
+      actions={
+        <button type="submit" form="edit-course" className="btn btn-primary" disabled={busy || !name.trim()}>
+          {busy ? "Saving…" : "Save changes"}
+        </button>
+      }
+    >
+      <form id="edit-course" onSubmit={handleSubmit}>
+        <FormField label="Subject name" required error={fields.name}>
+          <TextInput required autoFocus autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} />
+        </FormField>
+        <FormField label="Teacher" error={fields.teacherId}>
+          <Select value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
+            {!course.teacher && <option value="">No teacher assigned</option>}
+            {teachers.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+        {staff && teachers.length === 0 && (
+          <p className="sd-help" style={{ marginTop: -6 }}>
+            No teachers yet. <Link to="/dashboard/staff">Add a teacher</Link> first.
+          </p>
+        )}
+        {error && <p className="form-error" role="alert">{error}</p>}
+      </form>
+    </Modal>
   );
 }

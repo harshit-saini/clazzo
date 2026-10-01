@@ -10,7 +10,7 @@ export function NotFoundPage() {
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
       <div className="card elev-md" style={{ width: "min(420px, 100%)", padding: 36, gap: 14, textAlign: "center" }}>
         <h1 style={{ fontSize: 22, margin: 0 }}>Page not found</h1>
-        <p style={{ fontSize: 14, margin: 0, color: "color-mix(in srgb, var(--color-text) 65%, transparent)" }}>
+        <p style={{ fontSize: 14, margin: 0, color: "var(--color-text-muted)" }}>
           This link may be old, or the page may have moved.
         </p>
         <Link to="/" className="btn btn-primary btn-block">

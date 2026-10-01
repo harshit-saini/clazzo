@@ -18,10 +18,31 @@ const registerSchema = z.object({
   levels: z.array(z.string().trim().min(1).max(60)).max(6).optional(),
 });
 
-const studentSignupSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email().transform((e) => e.toLowerCase()),
+const studentSignupSchema = z
+  .object({
+    name: z.string().min(1),
+    email: z.string().email().transform((e) => e.toLowerCase()),
+    // "Are you under 18?" — a minor must name a guardian, whose consent is
+    // then required by every institute that later invites this account.
+    isMinor: z.boolean().default(false),
+    guardianEmail: z.string().email().transform((e) => e.toLowerCase()).optional(),
+  })
+  .refine((v) => !v.isMinor || Boolean(v.guardianEmail), {
+    message: "A guardian's email is required for students under 18",
+    path: ["guardianEmail"],
+  })
+  .refine((v) => !v.guardianEmail || v.guardianEmail !== v.email, {
+    message: "The guardian's email must be different from the student's",
+    path: ["guardianEmail"],
+  });
+
+const updateProfileSchema = z.object({ name: z.string().trim().min(1).max(120) });
+
+const emailChangeRequestSchema = z.object({
+  newEmail: z.string().email().transform((e) => e.toLowerCase()),
 });
+
+const emailChangeConfirmSchema = emailChangeRequestSchema.extend({ code: z.string().length(6) });
 
 const otpRequestSchema = z.object({
   email: z.string().email().transform((e) => e.toLowerCase()),
@@ -88,7 +109,14 @@ export default async function authRoutes(fastify: FastifyInstance) {
     // Same ordering rationale as /register: send first, create only once the
     // code has actually gone out.
     await issueOtpForEmail(body.email);
-    await prisma.studentAccount.create({ data: { name: body.name, email: body.email } });
+    await prisma.studentAccount.create({
+      data: {
+        name: body.name,
+        email: body.email,
+        isMinor: body.isMinor,
+        guardianEmail: body.isMinor ? body.guardianEmail : undefined,
+      },
+    });
 
     return reply.code(201).send({ message: GENERIC_OTP_SENT_MESSAGE });
   });
@@ -112,8 +140,10 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.post("/otp/verify", async (request, reply) => {
     const { email, code } = otpVerifySchema.parse(request.body);
 
-    const result = await verifyOtpCode(email, code);
-    if (!result.ok) return reply.code(401).send({ error: result.error });
+    const result = await verifyOtpCode(email, code, "LOGIN");
+    if (!result.ok) {
+      return reply.code(401).send({ error: result.error, reason: result.reason, attemptsLeft: result.attemptsLeft });
+    }
 
     const identity = await resolveIdentityByEmail(email);
     if (!identity) {
@@ -147,5 +177,55 @@ export default async function authRoutes(fastify: FastifyInstance) {
       name: account.name,
       email: account.email,
     });
+  });
+
+  // ── Profile ──────────────────────────────────────────────────────────
+  fastify.patch("/me", { preHandler: fastify.authenticate }, async (request, reply) => {
+    const { name } = updateProfileSchema.parse(request.body);
+
+    if (request.user.kind === "STAFF") {
+      const user = await prisma.user.update({ where: { id: request.user.userId }, data: { name } });
+      return reply.send({ id: user.id, name: user.name, email: user.email });
+    }
+    const account = await prisma.studentAccount.update({ where: { id: request.user.studentAccountId }, data: { name } });
+    return reply.send({ id: account.id, name: account.name, email: account.email });
+  });
+
+  // Changing the login email proves ownership of the NEW address with a
+  // code sent there — otherwise a typo would silently lock the user out.
+  fastify.post("/me/email/request", { preHandler: fastify.authenticate }, async (request, reply) => {
+    const { newEmail } = emailChangeRequestSchema.parse(request.body);
+
+    if (!isOtpRequestAllowed(newEmail)) {
+      return reply.code(429).send({ error: "Too many requests. Please wait a minute and try again." });
+    }
+    if (await resolveIdentityByEmail(newEmail)) {
+      return reply.code(409).send({ error: "That email is already in use" });
+    }
+
+    await issueOtpForEmail(newEmail);
+    return reply.send({ message: "We sent a code to the new address." });
+  });
+
+  fastify.post("/me/email/confirm", { preHandler: fastify.authenticate }, async (request, reply) => {
+    const { newEmail, code } = emailChangeConfirmSchema.parse(request.body);
+
+    const result = await verifyOtpCode(newEmail, code, "LOGIN");
+    if (!result.ok) {
+      return reply.code(401).send({ error: result.error, reason: result.reason, attemptsLeft: result.attemptsLeft });
+    }
+    if (await resolveIdentityByEmail(newEmail)) {
+      return reply.code(409).send({ error: "That email is already in use" });
+    }
+
+    if (request.user.kind === "STAFF") {
+      const user = await prisma.user.update({ where: { id: request.user.userId }, data: { email: newEmail } });
+      return reply.send({ email: user.email });
+    }
+    const account = await prisma.studentAccount.update({
+      where: { id: request.user.studentAccountId },
+      data: { email: newEmail },
+    });
+    return reply.send({ email: account.email });
   });
 }

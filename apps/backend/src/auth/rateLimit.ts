@@ -12,14 +12,23 @@ const MIN_INTERVAL_MS = 60 * 1000;
 
 const requestLog = new Map<string, number[]>();
 
-export function isOtpRequestAllowed(email: string): boolean {
+function isAllowed(key: string): boolean {
   const now = Date.now();
-  const timestamps = (requestLog.get(email) ?? []).filter((t) => now - t < WINDOW_MS);
+  const timestamps = (requestLog.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
 
   if (timestamps.length >= MAX_PER_WINDOW) return false;
   if (timestamps.length > 0 && now - timestamps[timestamps.length - 1] < MIN_INTERVAL_MS) return false;
 
   timestamps.push(now);
-  requestLog.set(email, timestamps);
+  requestLog.set(key, timestamps);
   return true;
+}
+
+export function isOtpRequestAllowed(email: string): boolean {
+  return isAllowed(`login:${email}`);
+}
+
+/** Separate budget for guardian consent-code requests, so they don't eat into login attempts. */
+export function isConsentRequestAllowed(email: string): boolean {
+  return isAllowed(`consent:${email}`);
 }

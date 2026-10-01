@@ -1,8 +1,11 @@
 import { Link } from "react-router-dom";
+import { useAuth } from "../../auth/AuthContext";
 import { api } from "../../lib/api";
 import { useApiData } from "../../lib/useApiData";
 import { AsyncState } from "../../components/AsyncState";
 import { DataTable } from "../../components/DataTable";
+import { EmptyState } from "../../components/EmptyState";
+import { PageHeader } from "../../components/PageHeader";
 import { useDocumentTitle } from "../../lib/useDocumentTitle";
 
 interface CourseRow {
@@ -17,38 +20,88 @@ interface CourseRow {
 
 export function CoursesPage() {
   useDocumentTitle("Subjects");
+  const { identity } = useAuth();
+  const role = identity?.kind === "STAFF" ? identity.role : null;
+  const isOwner = role === "OWNER";
   const { data: courses, loading, error, reload } = useApiData(() => api.get<CourseRow[]>("/api/courses"));
 
   return (
     <div>
-      <h1 style={{ fontSize: 26, marginBottom: 4 }}>Subjects</h1>
-      <p style={{ color: "color-mix(in srgb, var(--color-text) 65%, transparent)", marginBottom: 24 }}>
-        Every subject taught across your organization. Add one from <Link to="/dashboard/structure">the group that studies it</Link>.
-      </p>
+      <PageHeader
+        title="Subjects"
+        subtitle={
+          role === "TEACHER" ? (
+            "The subjects you teach."
+          ) : (
+            <>
+              Every subject taught across your organization.{" "}
+              {isOwner && (
+                <>
+                  Add one from <Link to="/dashboard/structure">the group that studies it</Link>.
+                </>
+              )}
+            </>
+          )
+        }
+        actions={
+          isOwner && (
+            <Link to="/dashboard/structure" className="btn btn-secondary">
+              Open structure
+            </Link>
+          )
+        }
+      />
 
       <AsyncState loading={loading} error={error} data={courses} onRetry={reload}>
-        {(courses) => (
-          <DataTable
-            rows={courses}
-            rowKey={(c) => c.id}
-            emptyMessage={<>No subjects yet — open a group under <Link to="/dashboard/structure">Structure</Link> and add one.</>}
-            columns={[
-              { header: "Subject", render: (c) => <Link to={`/dashboard/courses/${c.id}`}>{c.name}</Link> },
-              {
-                header: "Group",
-                render: (c) => <Link to={`/dashboard/structure/${c.orgUnit.id}`}>{c.orgUnit.name}</Link>,
-              },
-              { header: "Teacher", render: (c) => c.teacher?.name ?? "—" },
-              {
-                header: "Taken by",
-                render: (c) =>
-                  c.enrollmentMode === "SELECTED"
-                    ? `${c._count.courseEnrollments} selected student${c._count.courseEnrollments === 1 ? "" : "s"}`
-                    : "Everyone in the group",
-              },
-            ]}
-          />
-        )}
+        {(courses) =>
+          courses.length === 0 ? (
+            <EmptyState
+              title={
+                role === "TEACHER"
+                  ? "You haven't been assigned any subjects yet. Ask the owner to assign you to one."
+                  : "No subjects yet. Open a group and add the subjects it studies."
+              }
+              action={
+                isOwner && (
+                  <Link to="/dashboard/structure" className="btn btn-primary">
+                    Go to structure
+                  </Link>
+                )
+              }
+            />
+          ) : (
+            <DataTable
+              caption="Subjects"
+              rows={courses}
+              rowKey={(c) => c.id}
+              columns={[
+                {
+                  header: "Subject",
+                  primary: true,
+                  sortValue: (c) => c.name,
+                  render: (c) => <Link to={`/dashboard/courses/${c.id}`}>{c.name}</Link>,
+                },
+                {
+                  header: "Group",
+                  sortValue: (c) => c.orgUnit.name,
+                  render: (c) => <Link to={`/dashboard/structure/${c.orgUnit.id}`}>{c.orgUnit.name}</Link>,
+                },
+                {
+                  header: "Teacher",
+                  sortValue: (c) => c.teacher?.name ?? "",
+                  render: (c) => c.teacher?.name ?? <span className="tag tag-warning">Unassigned</span>,
+                },
+                {
+                  header: "Taken by",
+                  render: (c) =>
+                    c.enrollmentMode === "SELECTED"
+                      ? `${c._count.courseEnrollments} selected student${c._count.courseEnrollments === 1 ? "" : "s"}`
+                      : "Everyone in the group",
+                },
+              ]}
+            />
+          )
+        }
       </AsyncState>
     </div>
   );

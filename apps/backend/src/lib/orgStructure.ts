@@ -4,9 +4,9 @@ import { prisma } from "../db.js";
 /// The level ladder each org type starts with. Purely a starting point —
 /// levels are editable per institute once the account exists.
 export const ORG_TEMPLATES: Record<string, string[]> = {
-  SCHOOL: ["Center", "Class", "Section"],
-  COLLEGE: ["Center", "Degree", "Batch", "Specialization"],
-  COACHING: ["Center", "Batch"],
+  SCHOOL: ["Class", "Section"],
+  COLLEGE: ["Centre", "Degree", "Batch", "Specialization"],
+  COACHING: ["Centre", "Batch"],
   TUTOR: ["Group"],
 };
 

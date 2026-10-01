@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type ToastVariant = "success" | "error";
 interface Toast {
@@ -9,34 +9,71 @@ interface Toast {
 
 const ToastContext = createContext<((message: string, variant?: ToastVariant) => void) | null>(null);
 
-const DURATIONS: Record<ToastVariant, number> = { success: 3500, error: 6000 };
+// Errors stay until dismissed (a failure you missed is a failure you never
+// fixed); successes confirm and get out of the way. Both pause while hovered
+// or focused so slower readers aren't racing a timer (WCAG 2.2.1).
+const SUCCESS_MS = 5000;
+
+function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number) => void }) {
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    if (toast.variant === "error" || paused) return;
+    const timer = setTimeout(() => onDismiss(toast.id), SUCCESS_MS);
+    return () => clearTimeout(timer);
+  }, [toast, paused, onDismiss]);
+
+  return (
+    <div
+      className={`toast toast-${toast.variant}`}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+    >
+      <span className="toast-message">{toast.message}</span>
+      <button type="button" className="toast-close" aria-label="Dismiss notification" onClick={() => onDismiss(toast.id)}>
+        ×
+      </button>
+    </div>
+  );
+}
 
 /**
- * App-wide toast/snackbar. Before this, every create/update/delete flow
- * just closed its modal and silently reloaded — the only "confirmation"
- * was a table changing a moment later, and a failed request often had no
- * visible feedback at all. Mount once at the root; call useToast()
- * anywhere to surface a success or error message.
+ * App-wide toast/snackbar. Mount once at the root; call useToast()
+ * anywhere to surface a success or error message. Errors are announced
+ * assertively (role="alert"), successes politely — they live in separate
+ * live regions so a screen reader treats them differently.
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(0);
 
+  const dismiss = useCallback((id: number) => setToasts((prev) => prev.filter((t) => t.id !== id)), []);
+
   const showToast = useCallback((message: string, variant: ToastVariant = "success") => {
     const id = nextId.current++;
     setToasts((prev) => [...prev, { id, message, variant }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), DURATIONS[variant]);
   }, []);
 
   return (
     <ToastContext.Provider value={showToast}>
       {children}
-      <div className="toast-stack" role="status" aria-live="polite">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast toast-${t.variant}`}>
-            {t.message}
-          </div>
-        ))}
+      <div className="toast-stack">
+        <div role="status" aria-live="polite" style={{ display: "contents" }}>
+          {toasts
+            .filter((t) => t.variant === "success")
+            .map((t) => (
+              <ToastItem key={t.id} toast={t} onDismiss={dismiss} />
+            ))}
+        </div>
+        <div role="alert" style={{ display: "contents" }}>
+          {toasts
+            .filter((t) => t.variant === "error")
+            .map((t) => (
+              <ToastItem key={t.id} toast={t} onDismiss={dismiss} />
+            ))}
+        </div>
       </div>
     </ToastContext.Provider>
   );

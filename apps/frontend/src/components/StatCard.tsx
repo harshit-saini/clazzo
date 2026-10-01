@@ -29,7 +29,7 @@ export function StatCard({
 
   return (
     <div className="card elev-sm" style={{ padding: 20, gap: 6 }}>
-      <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.06em", color: "color-mix(in srgb, var(--color-text) 65%, transparent)" }}>
+      <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)" }}>
         {label}
       </div>
       <div style={{ fontFamily: "var(--font-heading)", fontSize: 28, color }}>{value}</div>

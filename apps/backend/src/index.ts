@@ -15,6 +15,7 @@ import structureRoutes from "./routes/structure.js";
 import studentPortalRoutes from "./routes/studentPortal.js";
 import consentRoutes from "./routes/consent.js";
 import dashboardRoutes from "./routes/dashboard.js";
+import instituteRoutes from "./routes/institute.js";
 
 const app = Fastify({ logger: true });
 
@@ -53,6 +54,7 @@ await app.register(structureRoutes, { prefix: "/api/structure" });
 await app.register(studentPortalRoutes, { prefix: "/api/student" });
 await app.register(consentRoutes, { prefix: "/api/consent" });
 await app.register(dashboardRoutes, { prefix: "/api/dashboard" });
+await app.register(instituteRoutes, { prefix: "/api/institute" });
 
 const port = Number(process.env.PORT ?? 3001);
 

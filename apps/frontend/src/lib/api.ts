@@ -22,13 +22,21 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
 }
 
 export class ApiError extends Error {
+  /** HTTP status, or 0 when the request never reached the server. */
   status: number;
   issues?: unknown;
+  /** Extra machine-readable detail the API attaches (e.g. `reason`, `attemptsLeft`, `code`). */
+  data?: Record<string, unknown>;
 
-  constructor(status: number, message: string, issues?: unknown) {
+  constructor(status: number, message: string, issues?: unknown, data?: Record<string, unknown>) {
     super(message);
     this.status = status;
     this.issues = issues;
+    this.data = data;
+  }
+
+  get isNetworkError() {
+    return this.status === 0;
   }
 }
 
@@ -40,14 +48,22 @@ interface RequestOptions {
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const token = getToken();
 
-  const res = await fetch(`${API_URL}${path}`, {
-    method: options.method ?? "GET",
-    headers: {
-      ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: options.method ?? "GET",
+      headers: {
+        ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    });
+  } catch {
+    // fetch only rejects when the request never completed (no signal, DNS,
+    // server down). Surface that as an ApiError with status 0 so callers can
+    // tell "couldn't reach the server" apart from "the server said no".
+    throw new ApiError(0, "Can't reach the server. Check your connection and try again.");
+  }
 
   if (res.status === 204) return undefined as T;
 
@@ -59,7 +75,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       setToken(null);
       onUnauthorized?.();
     }
-    throw new ApiError(res.status, data?.error ?? `Request failed (${res.status})`, data?.issues);
+    // "Validation failed" is the server's wording, not a sentence for a person.
+    const friendly = data?.error === "Validation failed" ? "Please check what you entered." : data?.error;
+    throw new ApiError(res.status, friendly ?? `Request failed (${res.status})`, data?.issues, data);
   }
 
   return data as T;

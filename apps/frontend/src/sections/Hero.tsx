@@ -1,118 +1,91 @@
-import { FeeIcon, SchoolIcon, SearchIcon, UsersIcon, GraduationCapIcon, FilterIcon, StarOutlineIcon, VideoIcon } from "../icons";
-
-const centerIconTileStyle = { background: "var(--color-accent-200)", border: "none", color: "var(--color-accent-800)" };
-const studentIconTileStyle = { background: "var(--color-accent-2-200)", border: "none", color: "var(--color-accent-2-800)" };
+import { Link } from "react-router-dom";
+import {
+  AttendanceIcon,
+  CalendarIcon,
+  FeeIcon,
+  GraduationCapIcon,
+  SchoolIcon,
+  ShieldCheckIcon,
+  UsersIcon,
+} from "../icons";
 
 export function Hero() {
   return (
-    <header id="hero" style={{ position: "relative", overflow: "hidden" }}>
-      <div
-        style={{
-          position: "absolute",
-          left: -160,
-          top: -140,
-          width: 340,
-          height: 340,
-          borderRadius: "50%",
-          background: "var(--color-accent-100)",
-          zIndex: 0,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          right: -180,
-          top: 80,
-          width: 380,
-          height: 380,
-          borderRadius: "50%",
-          background: "var(--color-accent-2-100)",
-          zIndex: 0,
-        }}
-      />
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "96px 24px 88px", position: "relative", zIndex: 1 }}>
-        <div style={{ textAlign: "center", maxWidth: 680, margin: "0 auto 56px" }}>
-          <span
-            style={{
-              display: "block",
-              fontSize: 13,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              fontWeight: 600,
-              color: "var(--color-accent-700)",
-              marginBottom: 16,
-            }}
-          >
-            The coaching marketplace
-          </span>
-          <h1 style={{ fontSize: "clamp(34px,4.6vw,54px)", lineHeight: 1.1, margin: 0 }}>
-            One platform, two sides of the classroom.
-          </h1>
-          <p style={{ fontSize: 17, lineHeight: 1.6, margin: "20px 0 0", color: "color-mix(in srgb, var(--color-text) 72%, transparent)" }}>
-            Clazzo connects coaching centers with the students looking for them — built for institutes to grow
-            online, and for students to find the right fit fast.
+    <header id="hero" className="mk-hero on-surface">
+      <div className="mk-hero-blob mk-hero-blob-a" aria-hidden="true" />
+      <div className="mk-hero-blob mk-hero-blob-b" aria-hidden="true" />
+      <div className="container mk-hero-inner">
+        <div className="mk-hero-intro">
+          <span className="eyebrow mk-eyebrow-block">For schools, colleges, coaching centres and tutors</span>
+          <h1 className="mk-hero-title">Attendance, fees and a student portal, in one place.</h1>
+          <p className="mk-lead">
+            Clazzo helps your institute mark attendance from a phone, keep track of fees and dues, and give every
+            student a login to see their classes, attendance and fees.
           </p>
         </div>
 
         <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28 }}>
-          <div style={{ background: "var(--color-accent-100)", borderRadius: 32, padding: 40, display: "flex", flexDirection: "column", gap: 18 }}>
-            <div style={{ width: 56, height: 56, borderRadius: "50%", display: "grid", placeContent: "center", ...centerIconTileStyle }}>
-              <SchoolIcon size={26} strokeWidth={2.75} />
+          <div className="mk-panel mk-panel-a">
+            <div className="mk-panel-icon">
+              <SchoolIcon size={26} />
             </div>
-            <h2 style={{ fontSize: 27, margin: 0 }}>Grow your institute online.</h2>
-            <p style={{ margin: 0, fontSize: 15.5, lineHeight: 1.6, color: "color-mix(in srgb, var(--color-text) 72%, transparent)" }}>
-              List your courses and batches, manage students and fees, and get discovered by students searching for
-              what you teach.
+            <h2>Run your school, college or centre.</h2>
+            <p>
+              Set up your classes, batches or groups, add students and subjects, and keep the day-to-day work out of
+              spreadsheets.
             </p>
-            <div style={{ display: "grid", gap: 12, marginTop: 4 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14.5 }}>
+            <div className="mk-checks">
+              <div className="mk-check">
                 <UsersIcon size={17} color="var(--color-accent-700)" />
-                Student &amp; batch management
+                A structure that fits how you teach
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14.5 }}>
+              <div className="mk-check">
+                <AttendanceIcon size={17} color="var(--color-accent-700)" />
+                Attendance marked on a phone
+              </div>
+              <div className="mk-check">
                 <FeeIcon size={17} color="var(--color-accent-700)" />
-                Fee tracking built in
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14.5 }}>
-                <SearchIcon size={17} color="var(--color-accent-700)" />
-                Get discovered by search
+                Invoices, payments and overdue fees
               </div>
             </div>
-            <a href="#" className="btn btn-primary" style={{ marginTop: 8, fontSize: 15, padding: "13px 22px" }}>
-              Register Your Coaching Center
-            </a>
+            <div className="mk-cta-row">
+              <Link to="/register" className="btn btn-primary btn-lg">
+                Register your institute
+              </Link>
+            </div>
           </div>
 
-          <div style={{ background: "var(--color-accent-2-100)", borderRadius: 32, padding: 40, display: "flex", flexDirection: "column", gap: 18 }}>
-            <div style={{ width: 56, height: 56, borderRadius: "50%", display: "grid", placeContent: "center", ...studentIconTileStyle }}>
-              <GraduationCapIcon size={26} strokeWidth={2.75} />
+          <div className="mk-panel mk-panel-b">
+            <div className="mk-panel-icon">
+              <GraduationCapIcon size={26} />
             </div>
-            <h2 style={{ fontSize: 27, margin: 0 }}>Find and join the right coaching center.</h2>
-            <p style={{ margin: 0, fontSize: 15.5, lineHeight: 1.6, color: "color-mix(in srgb, var(--color-text) 72%, transparent)" }}>
-              Compare coaching centers by subject, location and price, read real reviews from other students, and
-              enroll online.
+            <h2>Students get their own view.</h2>
+            <p>
+              Once an institute adds you, log in with your email to see your classes, attendance and fees, across
+              every institute you belong to.
             </p>
-            <div style={{ display: "grid", gap: 12, marginTop: 4 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14.5 }}>
-                <FilterIcon size={17} color="var(--color-accent-2-700)" />
-                Filter by subject, location, price
+            <div className="mk-checks">
+              <div className="mk-check">
+                <CalendarIcon size={17} color="var(--color-accent-2-700)" />
+                Classes this week, including cancellations
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14.5 }}>
-                <StarOutlineIcon size={17} color="var(--color-accent-2-700)" strokeWidth={2.75} />
-                Real reviews from students
+              <div className="mk-check">
+                <AttendanceIcon size={17} color="var(--color-accent-2-700)" />
+                Attendance history and fee status
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14.5 }}>
-                <VideoIcon size={17} color="var(--color-accent-2-700)" />
-                Book a demo before you enroll
+              <div className="mk-check">
+                <ShieldCheckIcon size={17} color="var(--color-accent-2-700)" />
+                Guardian consent for students under 18
               </div>
             </div>
-            <a
-              href="#"
-              className="btn"
-              style={{ marginTop: 8, fontSize: 15, padding: "13px 22px", background: "var(--color-accent-2)", color: "var(--color-bg)" }}
-            >
-              Find a Coaching Center
-            </a>
+            <div className="mk-cta-row">
+              <Link to="/student/signup" className="btn btn-sage btn-lg">
+                Student sign up
+              </Link>
+              <Link to="/login" className="btn btn-secondary btn-lg">
+                Log in
+              </Link>
+            </div>
           </div>
         </div>
       </div>

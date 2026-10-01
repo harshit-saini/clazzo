@@ -18,6 +18,10 @@ import { FeesPage } from "./dashboard/pages/FeesPage";
 import { StaffPage } from "./dashboard/pages/StaffPage";
 import { CoursesPage } from "./dashboard/pages/CoursesPage";
 import { CourseDetailPage } from "./dashboard/pages/CourseDetailPage";
+import { PrivacyPage } from "./pages/legal/PrivacyPage";
+import { TermsPage } from "./pages/legal/TermsPage";
+import { ContactPage } from "./pages/legal/ContactPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { PortalLayout } from "./portal/PortalLayout";
 import { PortalHome } from "./portal/pages/PortalHome";
 import { InstituteDetailPage } from "./portal/pages/InstituteDetailPage";
@@ -33,6 +37,9 @@ export default function App() {
           <Route path="/register" element={<RegisterInstitutePage />} />
           <Route path="/student/signup" element={<StudentSignupPage />} />
           <Route path="/consent/confirm" element={<ConsentConfirmPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/contact" element={<ContactPage />} />
 
           <Route element={<RequireAuth kind="STAFF" />}>
             <Route path="/dashboard" element={<DashboardLayout />}>
@@ -46,12 +53,14 @@ export default function App() {
               <Route path="attendance/:sessionId" element={<AttendanceMarkPage />} />
               <Route path="fees" element={<FeesPage />} />
               <Route path="staff" element={<StaffPage />} />
+              <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Route>
 
           <Route element={<RequireAuth kind="STUDENT" />}>
             <Route path="/portal" element={<PortalLayout />}>
               <Route index element={<PortalHome />} />
+              <Route path="settings" element={<SettingsPage />} />
               <Route path="institutes/:instituteId" element={<InstituteDetailPage />} />
               <Route path="institutes/:instituteId/attendance" element={<AttendanceHistoryPage />} />
             </Route>

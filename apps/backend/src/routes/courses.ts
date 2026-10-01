@@ -13,7 +13,13 @@ const createCourseSchema = z.object({
   enrollmentMode: z.enum(["ALL_IN_UNIT", "SELECTED"]).optional(),
 });
 
-const updateCourseSchema = createCourseSchema.omit({ orgUnitId: true }).partial();
+const updateCourseSchema = createCourseSchema
+  .omit({ orgUnitId: true, teacherId: true })
+  .partial()
+  .extend({
+    // null / "" unassigns the teacher.
+    teacherId: z.preprocess((v) => (v === "" ? null : v), z.string().nullable().optional()),
+  });
 const enrollSchema = z.object({ studentId: z.string() });
 
 async function assertTeacher(teacherId: string | undefined, instituteId: string) {
@@ -101,7 +107,7 @@ export default async function courseRoutes(fastify: FastifyInstance) {
 
     const existing = await prisma.course.findFirst({ where: { id, instituteId } });
     if (!existing) return reply.code(404).send({ error: "Not found" });
-    if (!(await assertTeacher(body.teacherId, instituteId))) {
+    if (!(await assertTeacher(body.teacherId ?? undefined, instituteId))) {
       return reply.code(404).send({ error: "Teacher not found" });
     }
 
