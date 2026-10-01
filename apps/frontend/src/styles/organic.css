@@ -542,6 +542,7 @@ a.nav-brand:not(.btn), a.nav-brand:not(.btn):hover { color: inherit; }
   font-size: 13px; cursor: pointer; text-align: center; user-select: none;
   border-radius: var(--radius-md); border: 1px solid var(--color-divider); background: var(--color-bg);
 }
+.att-opt { position: relative; }
 .att-opt input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
 .att-opt:hover { background: color-mix(in srgb, var(--color-text) 7%, var(--color-bg)); }
 .att-opt:has(input:checked) { background: var(--color-accent-700); border-color: var(--color-accent-700); color: var(--color-on-accent); font-weight: 600; }
@@ -908,3 +909,7 @@ a.mk-footer-link:not(.btn):hover { color: var(--color-link-hover); text-decorati
 .search-option-active { background: color-mix(in srgb, var(--color-accent-700) 14%, var(--color-bg)); }
 .search-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin-bottom: 14px; }
 .search-trigger kbd { font: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid var(--color-divider); border-radius: 6px; color: var(--color-text-muted); }
+
+/* Headings are focused programmatically after a route change so screen
+   readers announce the new page; that focus shouldn't draw a ring. */
+h1[tabindex="-1"]:focus, main[tabindex="-1"]:focus { outline: none; }

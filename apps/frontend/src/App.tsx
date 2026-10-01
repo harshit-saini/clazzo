@@ -18,6 +18,9 @@ import { FeesPage } from "./dashboard/pages/FeesPage";
 import { StaffPage } from "./dashboard/pages/StaffPage";
 import { CoursesPage } from "./dashboard/pages/CoursesPage";
 import { CourseDetailPage } from "./dashboard/pages/CourseDetailPage";
+import { PrivacyPage } from "./pages/legal/PrivacyPage";
+import { TermsPage } from "./pages/legal/TermsPage";
+import { ContactPage } from "./pages/legal/ContactPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { PortalLayout } from "./portal/PortalLayout";
 import { PortalHome } from "./portal/pages/PortalHome";
@@ -34,6 +37,9 @@ export default function App() {
           <Route path="/register" element={<RegisterInstitutePage />} />
           <Route path="/student/signup" element={<StudentSignupPage />} />
           <Route path="/consent/confirm" element={<ConsentConfirmPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/contact" element={<ContactPage />} />
 
           <Route element={<RequireAuth kind="STAFF" />}>
             <Route path="/dashboard" element={<DashboardLayout />}>
